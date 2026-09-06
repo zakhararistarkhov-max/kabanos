@@ -152,6 +152,7 @@ func Load() (*Config, error) {
 			Password:  env("SMTP_PASSWORD", ""),
 			FromName:  env("MAIL_FROM_NAME", "Kabanos"),
 			FromEmail: env("MAIL_FROM_EMAIL", "no-reply@kabanos.local"),
+			TLS:       env("SMTP_TLS", ""), // "", "none", "starttls" or "tls"
 		},
 		Telegram: Telegram{
 			BotToken: env("TELEGRAM_BOT_TOKEN", ""),

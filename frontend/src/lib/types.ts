@@ -154,3 +154,117 @@ export interface DishComment {
 
 export type DishScope = "all" | "mine" | "favorites";
 export type DishSort = "new" | "rating" | "name";
+
+// --- training (exercises & workouts) ---
+
+export type CatalogScope = "all" | "mine" | "favorites";
+export type CatalogSort = "new" | "rating" | "name";
+export type Category = "strength" | "cardio" | "mobility";
+export type Difficulty = "easy" | "medium" | "hard";
+export type JointImpact = "low" | "medium" | "high";
+
+export interface Option {
+  key: string;
+  label: string;
+}
+
+export interface TrainingMeta {
+  categories: Option[];
+  difficulties: Option[];
+  jointImpacts: Option[];
+  equipment: Option[];
+  muscles: Option[];
+}
+
+export interface Exercise {
+  id: string;
+  name: string;
+  description: string;
+  category: Category;
+  difficulty: Difficulty;
+  jointImpact: JointImpact;
+  equipment: string[];
+  muscles: string[];
+  imageUrl: string | null;
+  videoUrl: string;
+  ratingAvg: number;
+  ratingCount: number;
+  myRating: number | null;
+  isFavorite: boolean;
+  isMine: boolean;
+  authorName: string;
+  createdAt: string;
+}
+
+export interface ExerciseRef {
+  id: string;
+  name: string;
+  category: Category;
+  difficulty: Difficulty;
+  jointImpact: JointImpact;
+  equipment: string[];
+  imageUrl: string | null;
+  ratingAvg: number;
+  ratingCount: number;
+}
+
+export interface WorkoutItem {
+  id: string;
+  exerciseId: string;
+  position: number;
+  sets: number | null;
+  reps: number | null;
+  durationSec: number | null;
+  restSec: number | null;
+  weightKg: number | null;
+  note: string;
+  exercise: ExerciseRef;
+}
+
+export interface Workout {
+  id: string;
+  name: string;
+  description: string;
+  difficulty: Difficulty;
+  imageUrl: string | null;
+  exerciseCount: number;
+  ratingAvg: number;
+  ratingCount: number;
+  myRating: number | null;
+  isFavorite: boolean;
+  isMine: boolean;
+  authorName: string;
+  createdAt: string;
+  items?: WorkoutItem[];
+}
+
+export interface CatalogComment {
+  id: string;
+  authorName: string;
+  body: string;
+  createdAt: string;
+  isMine: boolean;
+}
+
+// --- medications / vitamins ---
+
+export type MedStatus = "upcoming" | "active" | "finished";
+
+export interface Medication {
+  id: string;
+  name: string;
+  unit: string;
+  dose: number;
+  timesPerDay: number;
+  startDate: string;
+  durationDays: number | null;
+  courseDay: number;
+  courseTotal: number | null;
+  status: MedStatus;
+  takenToday: number;
+  remainingToday: number;
+  weekTaken: number;
+  notes: string;
+  active: boolean;
+  createdAt: string;
+}

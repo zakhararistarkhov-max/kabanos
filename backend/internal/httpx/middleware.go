@@ -87,6 +87,25 @@ func Recoverer(next http.Handler) http.Handler {
 	})
 }
 
+// SecurityHeaders sets conservative security response headers. The API serves
+// only JSON, so a locked-down CSP and frame denial are safe and cheap defence
+// in depth. HSTS is emitted only when the request arrived over HTTPS (detected
+// via the trusted proxy's X-Forwarded-Proto) so local HTTP is unaffected.
+func SecurityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		h.Set("Cross-Origin-Opener-Policy", "same-origin")
+		h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		if r.Header.Get("X-Forwarded-Proto") == "https" || r.TLS != nil {
+			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // CORS applies a strict allow-list. Credentials are permitted because the
 // frontend sends the Authorization header. A wildcard origin is never returned
 // alongside credentials, per the CORS spec.

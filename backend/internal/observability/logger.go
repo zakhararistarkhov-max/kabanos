@@ -13,9 +13,10 @@ type ctxKey int
 
 const loggerKey ctxKey = iota
 
-// NewLogger returns a slog.Logger configured for the environment. Development
-// uses human-readable text; production uses JSON for log aggregation.
-func NewLogger(env string) *slog.Logger {
+// NewLogger returns a slog.Logger configured for the environment, tagged with
+// the given service name. Development uses human-readable text; production uses
+// JSON for log aggregation.
+func NewLogger(env, service string) *slog.Logger {
 	level := slog.LevelInfo
 	if env == "development" {
 		level = slog.LevelDebug
@@ -28,7 +29,7 @@ func NewLogger(env string) *slog.Logger {
 	} else {
 		handler = slog.NewTextHandler(os.Stdout, opts)
 	}
-	return slog.New(handler).With(slog.String("service", "kabanos-api"))
+	return slog.New(handler).With(slog.String("service", service))
 }
 
 // WithLogger stores a request-scoped logger (carrying request id, user id, …)

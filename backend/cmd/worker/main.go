@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -34,10 +35,10 @@ const (
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		observability.NewLogger(os.Getenv("APP_ENV")).Error("failed to load config", slog.String("error", err.Error()))
+		observability.NewLogger(os.Getenv("APP_ENV"), "kabanos-worker").Error("failed to load config", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	logger := observability.NewLogger(cfg.Env).With(slog.String("service", "kabanos-worker"))
+	logger := observability.NewLogger(cfg.Env, "kabanos-worker")
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -67,6 +68,18 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	mail := mailer.New(cfg.Mailer)
 	tg := notify.NewTelegram(cfg.Telegram.BotToken)
 	d := &dispatcher{mail: mail, tg: tg}
+
+	// Make the effective mail destination unmistakable in the logs — the #1
+	// source of "why didn't my email arrive?" is SMTP still pointing at the dev
+	// catcher (Mailpit), which never delivers to real inboxes.
+	logger.Info("outbound email transport",
+		slog.String("smtp", fmt.Sprintf("%s:%d", cfg.Mailer.Host, cfg.Mailer.Port)),
+		slog.String("tls", cfg.Mailer.TLSMode()),
+		slog.String("from", cfg.Mailer.FromEmail),
+	)
+	if isDevMailCatcher(cfg.Mailer) {
+		logger.Warn("SMTP is a DEV mail catcher — email is captured locally and NOT delivered to real inboxes; set SMTP_HOST/PORT/USERNAME/PASSWORD in .env for real delivery")
+	}
 
 	logger.Info("worker started", slog.Duration("poll_interval", pollInterval))
 	ticker := time.NewTicker(pollInterval)
@@ -151,3 +164,13 @@ func (d *dispatcher) dispatch(ctx context.Context, m outbox.Message) error {
 type errUnknownTopic string
 
 func (e errUnknownTopic) Error() string { return "unknown outbox topic: " + string(e) }
+
+// isDevMailCatcher reports whether the SMTP target is a local dev catcher
+// (Mailpit/Mailhog) rather than a relay that reaches real inboxes.
+func isDevMailCatcher(m config.Mailer) bool {
+	switch m.Host {
+	case "mailpit", "mailhog", "localhost", "127.0.0.1", "":
+		return true
+	}
+	return m.Port == 1025
+}

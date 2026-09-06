@@ -95,6 +95,12 @@ func NewImageKey(ext string) string {
 	return "dishes/" + uuid.NewString() + ext
 }
 
+// NewKey returns a fresh object key under the given prefix (e.g. "exercises")
+// with the given, already-validated extension.
+func NewKey(prefix, ext string) string {
+	return prefix + "/" + uuid.NewString() + ext
+}
+
 // PresignPut returns a URL the browser can PUT the file to directly. The
 // content type is not bound into the signature, so the browser may send any
 // image type it declared; validation happens before the key is issued.

@@ -58,11 +58,11 @@ type Comment struct {
 }
 
 type Goal struct {
-	Kcal      int
-	Protein   float64
-	Fat       float64
-	Carbs     float64
-	UpdatedAt time.Time
+	Kcal      int       `json:"kcal"`
+	Protein   float64   `json:"protein"`
+	Fat       float64   `json:"fat"`
+	Carbs     float64   `json:"carbs"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // DietEntry is one logged food item with a macro snapshot (authoritative even

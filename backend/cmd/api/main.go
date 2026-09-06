@@ -22,11 +22,13 @@ import (
 	"github.com/kabanos/backend/internal/auth"
 	"github.com/kabanos/backend/internal/config"
 	"github.com/kabanos/backend/internal/httpx"
+	"github.com/kabanos/backend/internal/meds"
 	"github.com/kabanos/backend/internal/nutrition"
 	"github.com/kabanos/backend/internal/observability"
 	"github.com/kabanos/backend/internal/postgres"
 	"github.com/kabanos/backend/internal/redisx"
 	"github.com/kabanos/backend/internal/storage"
+	"github.com/kabanos/backend/internal/training"
 	"github.com/kabanos/backend/internal/user"
 	"github.com/kabanos/backend/internal/water"
 	"github.com/kabanos/backend/internal/weight"
@@ -50,10 +52,10 @@ func (a weightAdapter) LatestKg(ctx context.Context, userID uuid.UUID) (float64,
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		observability.NewLogger(os.Getenv("APP_ENV")).Error("failed to load config", slog.String("error", err.Error()))
+		observability.NewLogger(os.Getenv("APP_ENV"), "kabanos-api").Error("failed to load config", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	logger := observability.NewLogger(cfg.Env)
+	logger := observability.NewLogger(cfg.Env, "kabanos-api")
 
 	// Root context cancelled on SIGINT/SIGTERM → triggers graceful shutdown.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -99,6 +101,9 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	weightRepo := weight.NewRepo(db)
 	dishRepo := nutrition.NewDishRepo(db)
 	logRepo := nutrition.NewLogRepo(db)
+	exerciseRepo := training.NewExerciseRepo(db)
+	workoutRepo := training.NewWorkoutRepo(db)
+	medsRepo := meds.NewRepo(db)
 
 	// --- services ---
 	authSvc := auth.NewService(db, users, auth.Config{
@@ -111,12 +116,16 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	waterSvc := water.NewService(waterRepo)
 	weightSvc := weight.NewService(weightRepo, users)
 	nutritionSvc := nutrition.NewService(dishRepo, logRepo, store, weightAdapter{repo: weightRepo})
+	trainingSvc := training.NewService(exerciseRepo, workoutRepo, store)
+	medsSvc := meds.NewService(medsRepo)
 
 	// --- handlers ---
 	authH := auth.NewHandler(authSvc, users)
 	waterH := water.NewHandler(waterSvc)
 	weightH := weight.NewHandler(weightSvc)
 	nutritionH := nutrition.NewHandler(nutritionSvc)
+	trainingH := training.NewHandler(trainingSvc)
+	medsH := meds.NewHandler(medsSvc)
 
 	// --- rate limiters (shared across replicas via Redis) ---
 	authLimiter := httpx.NewRateLimiter(rdb, 20, time.Minute) // brute-force protection
@@ -127,6 +136,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	r.Use(httpx.RequestContext(logger))
 	r.Use(httpx.AccessLog)
 	r.Use(httpx.Recoverer)
+	r.Use(httpx.SecurityHeaders)
 	r.Use(httpx.CORS(cfg.CORSAllowedOrigins))
 
 	// Health probes (unauthenticated, unlimited).
@@ -164,6 +174,8 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 			r.Mount("/water", waterH.Routes())
 			r.Mount("/weight", weightH.Routes())
 			r.Mount("/nutrition", nutritionH.Routes())
+			r.Mount("/training", trainingH.Routes())
+			r.Mount("/meds", medsH.Routes())
 		})
 	})
 

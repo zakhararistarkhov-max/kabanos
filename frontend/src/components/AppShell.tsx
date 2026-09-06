@@ -5,12 +5,16 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { authApi } from "@/lib/api";
 import { useSession, useInvalidateSession } from "@/hooks/useSession";
+import { KabanosLogo } from "@/components/Logo";
 
 const NAV = [
   { href: "/dashboard", label: "Дашборд", icon: "◆" },
   { href: "/water", label: "Вода", icon: "💧" },
   { href: "/nutrition", label: "Калории", icon: "🍎" },
   { href: "/dishes", label: "Блюда", icon: "🍽️" },
+  { href: "/workouts", label: "Тренировки", icon: "🏋️" },
+  { href: "/exercises", label: "Упражнения", icon: "💪" },
+  { href: "/meds", label: "Таблетки", icon: "💊" },
   { href: "/weight", label: "Вес", icon: "⚖️" },
   { href: "/settings", label: "Настройки", icon: "⚙️" },
 ];
@@ -39,8 +43,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 border-b border-ink-800 bg-ink-950/80 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-          <Link href="/dashboard" className="text-lg font-bold text-brand">
-            Kabanos
+          <Link href="/dashboard" aria-label="Kabanos — на дашборд">
+            <KabanosLogo size={34} wordSize="1.125rem" />
           </Link>
           <nav className="flex items-center gap-1">
             {NAV.map((item) => {

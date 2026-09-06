@@ -7,6 +7,7 @@ package mailer
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/smtp"
 	"strings"
@@ -58,10 +59,11 @@ func greeting(name string) string {
 	return "Здравствуйте, " + name + "!"
 }
 
-// send delivers a multipart-free HTML email. It uses PlainAuth only when
-// credentials are configured (Mailhog needs none).
+// send renders the RFC 5322 message and delivers it, honouring the configured
+// transport (plaintext for Mailpit, STARTTLS on 587, implicit TLS on 465).
+// net/smtp has no context support, so the deadline is enforced with a goroutine
+// to guarantee a hung relay can never block the worker indefinitely.
 func (m *Mailer) send(ctx context.Context, to, subject, htmlBody string) error {
-	addr := fmt.Sprintf("%s:%d", m.cfg.Host, m.cfg.Port)
 	from := fmt.Sprintf("%s <%s>", m.cfg.FromName, m.cfg.FromEmail)
 
 	var msg bytes.Buffer
@@ -74,23 +76,96 @@ func (m *Mailer) send(ctx context.Context, to, subject, htmlBody string) error {
 	msg.WriteString("\r\n")
 	msg.WriteString(htmlBody)
 
-	var auth smtp.Auth
-	if m.cfg.Username != "" {
-		auth = smtp.PlainAuth("", m.cfg.Username, m.cfg.Password, m.cfg.Host)
-	}
-
-	// net/smtp has no context support; enforce the deadline with a goroutine so
-	// a hung relay cannot block the worker indefinitely.
 	done := make(chan error, 1)
-	go func() {
-		done <- smtp.SendMail(addr, auth, m.cfg.FromEmail, []string{to}, msg.Bytes())
-	}()
+	go func() { done <- m.deliver(to, msg.Bytes()) }()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case err := <-done:
 		return err
 	}
+}
+
+// deliver dispatches to the transport implied by the configured TLS mode.
+func (m *Mailer) deliver(to string, msg []byte) error {
+	addr := fmt.Sprintf("%s:%d", m.cfg.Host, m.cfg.Port)
+
+	// PlainAuth is only attached when credentials are set (Mailpit needs none).
+	var auth smtp.Auth
+	if m.cfg.Username != "" {
+		auth = smtp.PlainAuth("", m.cfg.Username, m.cfg.Password, m.cfg.Host)
+	}
+
+	switch m.cfg.TLSMode() {
+	case "tls":
+		return m.deliverImplicitTLS(addr, auth, to, msg)
+	case "starttls":
+		return m.deliverStartTLS(addr, auth, to, msg)
+	default: // "none" — plaintext, dev relays such as Mailpit
+		return smtp.SendMail(addr, auth, m.cfg.FromEmail, []string{to}, msg)
+	}
+}
+
+// deliverImplicitTLS connects over TLS from the first byte (SMTPS, port 465).
+func (m *Mailer) deliverImplicitTLS(addr string, auth smtp.Auth, to string, msg []byte) error {
+	conn, err := tls.Dial("tcp", addr, m.tlsConfig())
+	if err != nil {
+		return fmt.Errorf("smtp tls dial: %w", err)
+	}
+	c, err := smtp.NewClient(conn, m.cfg.Host)
+	if err != nil {
+		_ = conn.Close()
+		return fmt.Errorf("smtp new client: %w", err)
+	}
+	defer c.Close()
+	return m.transact(c, auth, to, msg)
+}
+
+// deliverStartTLS connects in plaintext then upgrades via STARTTLS (port 587).
+func (m *Mailer) deliverStartTLS(addr string, auth smtp.Auth, to string, msg []byte) error {
+	c, err := smtp.Dial(addr)
+	if err != nil {
+		return fmt.Errorf("smtp dial: %w", err)
+	}
+	defer c.Close()
+	if ok, _ := c.Extension("STARTTLS"); ok {
+		if err := c.StartTLS(m.tlsConfig()); err != nil {
+			return fmt.Errorf("smtp starttls: %w", err)
+		}
+	}
+	return m.transact(c, auth, to, msg)
+}
+
+// transact runs the AUTH/MAIL/RCPT/DATA sequence on an established client.
+func (m *Mailer) transact(c *smtp.Client, auth smtp.Auth, to string, msg []byte) error {
+	if auth != nil {
+		if ok, _ := c.Extension("AUTH"); ok {
+			if err := c.Auth(auth); err != nil {
+				return fmt.Errorf("smtp auth: %w", err)
+			}
+		}
+	}
+	if err := c.Mail(m.cfg.FromEmail); err != nil {
+		return fmt.Errorf("smtp mail from: %w", err)
+	}
+	if err := c.Rcpt(to); err != nil {
+		return fmt.Errorf("smtp rcpt to: %w", err)
+	}
+	wc, err := c.Data()
+	if err != nil {
+		return fmt.Errorf("smtp data: %w", err)
+	}
+	if _, err := wc.Write(msg); err != nil {
+		return fmt.Errorf("smtp write: %w", err)
+	}
+	if err := wc.Close(); err != nil {
+		return fmt.Errorf("smtp close data: %w", err)
+	}
+	return c.Quit()
+}
+
+func (m *Mailer) tlsConfig() *tls.Config {
+	return &tls.Config{ServerName: m.cfg.Host, MinVersion: tls.VersionTLS12}
 }
 
 func renderTemplate(title, greeting, intro, cta, link, footer string) string {

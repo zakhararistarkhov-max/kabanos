@@ -6,8 +6,11 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  Cell,
   Line,
   LineChart,
+  Pie,
+  PieChart,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -42,6 +45,32 @@ function num(v: string): number {
 
 function hhmm(iso: string): string {
   return new Date(iso).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+}
+
+interface MacroSlice {
+  name: string;
+  grams: number;
+  kcal: number;
+  pct: number;
+  color: string;
+}
+
+// energySplit converts grams of protein/fat/carbs into their share of calories
+// (protein & carbs 4 kcal/g, fat 9 kcal/g) — the basis for the balance donut.
+function energySplit(protein: number, fat: number, carbs: number): { total: number; slices: MacroSlice[] } {
+  const p = protein * 4;
+  const f = fat * 9;
+  const c = carbs * 4;
+  const total = p + f + c;
+  const pct = (x: number) => (total > 0 ? Math.round((x / total) * 100) : 0);
+  return {
+    total,
+    slices: [
+      { name: "Белки", grams: protein, kcal: Math.round(p), pct: pct(p), color: "#34d399" },
+      { name: "Жиры", grams: fat, kcal: Math.round(f), pct: pct(f), color: "#fbbf24" },
+      { name: "Углеводы", grams: carbs, kcal: Math.round(c), pct: pct(c), color: "#38bdf8" },
+    ],
+  };
 }
 
 export default function NutritionPage() {
@@ -84,6 +113,22 @@ export default function NutritionPage() {
       })),
     [history.data],
   );
+
+  // Today's vs goal macro split by ENERGY (kcal): protein/carbs = 4, fat = 9.
+  const macroSplit = useMemo(() => (d ? energySplit(d.consumed.protein, d.consumed.fat, d.consumed.carbs) : null), [d]);
+  const goalSplit = useMemo(() => (d ? energySplit(d.goal.protein, d.goal.fat, d.goal.carbs) : null), [d]);
+
+  // 14-day macro history + averages over days that actually have data.
+  const macroHistory = useMemo(
+    () => (history.data?.series ?? []).map((r) => ({ day: r.date.slice(5), protein: r.protein, fat: r.fat, carbs: r.carbs })),
+    [history.data],
+  );
+  const macroAvg = useMemo(() => {
+    const rows = (history.data?.series ?? []).filter((r) => r.kcal > 0 || r.protein > 0 || r.fat > 0 || r.carbs > 0);
+    if (rows.length === 0) return { protein: 0, fat: 0, carbs: 0 };
+    const sum = rows.reduce((a, r) => ({ protein: a.protein + r.protein, fat: a.fat + r.fat, carbs: a.carbs + r.carbs }), { protein: 0, fat: 0, carbs: 0 });
+    return { protein: +(sum.protein / rows.length).toFixed(1), fat: +(sum.fat / rows.length).toFixed(1), carbs: +(sum.carbs / rows.length).toFixed(1) };
+  }, [history.data]);
 
   return (
     <div className="space-y-6">
@@ -166,6 +211,30 @@ export default function NutritionPage() {
                 </div>
               ) : (
                 <p className="text-sm text-ink-500">Добавьте приёмы пищи, чтобы увидеть динамику.</p>
+              )}
+            </div>
+          </div>
+
+          {/* macro balance infographic */}
+          <div className="card">
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-semibold">Баланс БЖУ</h2>
+              <span className="text-sm text-ink-500">доля калорий из белков / жиров / углеводов</span>
+            </div>
+            <div className="grid gap-6 sm:grid-cols-2">
+              {macroSplit && macroSplit.total > 0 ? (
+                <MacroDonut title="Сегодня" split={macroSplit} centerLabel={`${Math.round(macroSplit.total)}`} centerHint="ккал из БЖУ" />
+              ) : (
+                <div className="flex h-56 items-center justify-center text-sm text-ink-500">
+                  Добавьте приёмы пищи, чтобы увидеть баланс.
+                </div>
+              )}
+              {goalSplit && goalSplit.total > 0 ? (
+                <MacroDonut title="Ваша цель" split={goalSplit} centerLabel={`${Math.round(goalSplit.total)}`} centerHint="ккал из БЖУ" muted />
+              ) : (
+                <div className="flex h-56 items-center justify-center text-sm text-ink-500">
+                  Задайте цели по БЖУ ниже.
+                </div>
               )}
             </div>
           </div>
@@ -257,6 +326,23 @@ export default function NutritionPage() {
               </ResponsiveContainer>
             </div>
           </div>
+
+          {/* macro history */}
+          <div className="card">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-semibold">БЖУ за 14 дней</h2>
+              <span className="text-sm text-ink-500">
+                среднее в день: <span className="text-good">Б {macroAvg.protein} г</span> ·{" "}
+                <span className="text-warn">Ж {macroAvg.fat} г</span> ·{" "}
+                <span className="text-brand">У {macroAvg.carbs} г</span>
+              </span>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <MacroTrend data={macroHistory} dataKey="protein" label="Белки" color="#34d399" goal={d.goal.protein} avg={macroAvg.protein} />
+              <MacroTrend data={macroHistory} dataKey="fat" label="Жиры" color="#fbbf24" goal={d.goal.fat} avg={macroAvg.fat} />
+              <MacroTrend data={macroHistory} dataKey="carbs" label="Углеводы" color="#38bdf8" goal={d.goal.carbs} avg={macroAvg.carbs} />
+            </div>
+          </div>
         </>
       ) : (
         <div className="card h-40 animate-pulse bg-ink-800/40" />
@@ -283,6 +369,109 @@ function MacroCard({ label, value, goal, unit, accent }: { label: string; value:
       <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-ink-800">
         <div className={`h-full rounded-full ${bar} transition-all`} style={{ width: `${pct}%` }} />
       </div>
+      <div className="mt-1 text-xs text-ink-500">{goal > 0 ? `${Math.round(pct)}% цели` : "цель не задана"}</div>
+    </div>
+  );
+}
+
+function MacroDonut({
+  title,
+  split,
+  centerLabel,
+  centerHint,
+  muted,
+}: {
+  title: string;
+  split: { total: number; slices: MacroSlice[] };
+  centerLabel: string;
+  centerHint: string;
+  muted?: boolean;
+}) {
+  return (
+    <div>
+      <div className="mb-1 text-center text-sm font-medium text-ink-300">{title}</div>
+      <div className="relative h-44">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={split.slices}
+              dataKey="kcal"
+              nameKey="name"
+              innerRadius={52}
+              outerRadius={72}
+              paddingAngle={2}
+              stroke="none"
+              opacity={muted ? 0.75 : 1}
+            >
+              {split.slices.map((s) => (
+                <Cell key={s.name} fill={s.color} />
+              ))}
+            </Pie>
+            <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`${v} ккал`, n]} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+          <div className="text-xl font-black">{centerLabel}</div>
+          <div className="text-[11px] text-ink-500">{centerHint}</div>
+        </div>
+      </div>
+      <div className="mt-2 space-y-1">
+        {split.slices.map((s) => (
+          <div key={s.name} className="flex items-center justify-between text-sm">
+            <span className="flex items-center gap-2">
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
+              {s.name}
+            </span>
+            <span className="text-ink-400">
+              {s.grams} г · {s.pct}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MacroTrend({
+  data,
+  dataKey,
+  label,
+  color,
+  goal,
+  avg,
+}: {
+  data: { day: string; protein: number; fat: number; carbs: number }[];
+  dataKey: "protein" | "fat" | "carbs";
+  label: string;
+  color: string;
+  goal: number;
+  avg: number;
+}) {
+  return (
+    <div className="rounded-xl border border-ink-800 bg-ink-950/40 p-3">
+      <div className="mb-1 flex items-baseline justify-between">
+        <span className="text-sm font-medium">{label}</span>
+        <span className="text-xs text-ink-500">{goal > 0 ? `цель ${Math.round(goal)} г` : "цель —"}</span>
+      </div>
+      <div className="h-28">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
+            <defs>
+              <linearGradient id={`grad-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity={0.45} />
+                <stop offset="100%" stopColor={color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+            <XAxis dataKey="day" tick={{ fill: "#64748b", fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+            <YAxis width={26} tick={{ fill: "#64748b", fontSize: 10 }} tickLine={false} axisLine={false} />
+            <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`${v} г`, label]} />
+            {goal > 0 ? <ReferenceLine y={goal} stroke="#64748b" strokeDasharray="4 4" /> : null}
+            <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} fill={`url(#grad-${dataKey})`} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-1 text-center text-xs text-ink-500">среднее {avg} г/день</div>
     </div>
   );
 }

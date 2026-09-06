@@ -14,8 +14,13 @@ x-backend-env: &backend-env
   JWT_SECRET: ${JWT_SECRET:-dev-insecure-secret-change-me}
   PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
   CORS_ALLOWED_ORIGINS: ${PUBLIC_APP_URL:-http://localhost:3000}
-  SMTP_HOST: mailpit
-  SMTP_PORT: "1025"
+  # Defaults target the bundled Mailpit dev relay. Point these at a real SMTP
+  # provider in .env (see .env.example) to deliver mail to real inboxes.
+  SMTP_HOST: ${SMTP_HOST:-mailpit}
+  SMTP_PORT: ${SMTP_PORT:-1025}
+  SMTP_USERNAME: ${SMTP_USERNAME:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_TLS: ${SMTP_TLS:-}
   MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL:-no-reply@kabanos.local}
   MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Kabanos}
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
