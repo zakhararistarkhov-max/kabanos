@@ -1,0 +1,136 @@
+# Local / single-host deployment. Brings up the full stack:
+#   postgres, redis, mailpit (dev SMTP), the Go API, the outbox worker, and the
+#   Next.js frontend. For a fault-tolerant multi-replica setup see
+#   docker-compose.scale.yml and the README.
+#
+# Copy .env.example to .env first (or rely on the built-in defaults below).
+
+name: kabanos
+
+x-backend-env: &backend-env
+  APP_ENV: ${APP_ENV:-development}
+  POSTGRES_DSN: postgres://${POSTGRES_USER:-kabanos}:${POSTGRES_PASSWORD:-kabanos}@postgres:5432/${POSTGRES_DB:-kabanos}?sslmode=disable
+  REDIS_ADDR: redis:6379
+  JWT_SECRET: ${JWT_SECRET:-dev-insecure-secret-change-me}
+  PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
+  CORS_ALLOWED_ORIGINS: ${PUBLIC_APP_URL:-http://localhost:3000}
+  SMTP_HOST: mailpit
+  SMTP_PORT: "1025"
+  MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL:-no-reply@kabanos.local}
+  MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Kabanos}
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  # Object storage for dish photos. Endpoint is internal; public endpoint is
+  # what the browser uses (presigned URLs are signed for it).
+  S3_ENDPOINT: minio:9000
+  S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-localhost:9000}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-kabanos}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:-kabanos-secret}
+  S3_BUCKET: ${S3_BUCKET:-kabanos}
+  S3_USE_SSL: "false"
+  S3_ENABLED: "true"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kabanos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kabanos}
+      POSTGRES_DB: ${POSTGRES_DB:-kabanos}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kabanos} -d ${POSTGRES_DB:-kabanos}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025" # web UI: view sent emails
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-kabanos}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-kabanos-secret}
+      # Allow presigned uploads/downloads directly from the browser origin.
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
+    ports:
+      - "${MINIO_PORT:-9000}:9000"       # S3 API (browser + backend)
+      - "${MINIO_CONSOLE_PORT:-9001}:9001" # web console
+    volumes:
+      - miniodata:/data
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+      target: api
+    environment:
+      <<: *backend-env
+      HTTP_ADDR: ":8080"
+      POSTGRES_AUTO_MIGRATE: "true"
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+      target: worker
+    environment:
+      <<: *backend-env
+      # The worker also ensures migrations (advisory-locked) so it can boot
+      # independently of the API.
+      POSTGRES_AUTO_MIGRATE: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      NODE_ENV: production
+      # Server-side only: the browser never sees this. Points at the API service.
+      BACKEND_INTERNAL_URL: http://api:8080
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

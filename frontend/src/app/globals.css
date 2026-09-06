@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  @apply bg-ink-950 text-ink-100 antialiased;
+  background-image: radial-gradient(1200px 600px at 80% -10%, rgba(56, 189, 248, 0.08), transparent 60%),
+    radial-gradient(900px 500px at 0% 110%, rgba(52, 211, 153, 0.06), transparent 55%);
+  background-attachment: fixed;
+}
+
+/* Thin, themed scrollbars for a polished feel. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #334155 transparent;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-ink-800 bg-ink-900/70 backdrop-blur p-5 shadow-lg shadow-black/20;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-semibold transition
+      disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-brand text-ink-950 hover:bg-brand-strong;
+  }
+  .btn-ghost {
+    @apply btn bg-ink-800 text-ink-100 hover:bg-ink-700;
+  }
+  .input {
+    @apply w-full rounded-xl border border-ink-700 bg-ink-950/60 px-3.5 py-2.5 text-ink-100
+      placeholder:text-ink-500 outline-none focus:border-brand focus:ring-2 focus:ring-brand/30;
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-ink-300;
+  }
+  .field-error {
+    @apply mt-1 text-sm text-bad;
+  }
+}
+
+/* Water surface animation for the hydration container. */
+@keyframes waterwave {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+.animate-wave {
+  animation: waterwave 6s linear infinite;
+}
+.animate-wave-slow {
+  animation: waterwave 9s linear infinite;
+}
