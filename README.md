@@ -150,11 +150,14 @@ docker compose up --build -d
 `app.example.com` → IP (и, если нужны фото, `media.example.com` → тот же IP). В
 облачном firewall/security group откройте порты **22, 80, 443**.
 
-### 1. Подключиться и обновить систему
+### 1. Подключиться и стать root
 ```bash
-ssh root@<IP_VM>
+ssh <user>@<IP_VM>   # пользователь по умолчанию у облачной VM (Yandex Cloud/GCP/…), не root
+sudo -i              # получить root-права (у дефолтного пользователя sudo обычно без пароля)
 apt update && apt -y upgrade
 ```
+Дальше все команды выполняются от root. Если предпочитаете не входить под root —
+добавляйте `sudo` к каждой команде (а Docker ставьте так: `curl -fsSL https://get.docker.com | sudo sh`).
 
 ### 2. Firewall — только SSH и HTTP(S)
 ```bash
@@ -195,11 +198,15 @@ SMTP_USERNAME=<логин>
 SMTP_PASSWORD=<пароль/ключ>
 MAIL_FROM_EMAIL=no-reply@example.com
 
-# Хранилище фото: свои ключи + публичный домен MinIO (см. шаг 7):
-S3_ACCESS_KEY=<...>
-S3_SECRET_KEY=<...>
+# Фото хранит ВСТРОЕННЫЙ MinIO (сервис `minio` в docker-compose) — это и есть ваш
+# S3, ничего внешнего не нужно. Ключи ниже вы задаёте сами (станут логином/паролем
+# MinIO). S3_PUBLIC_ENDPOINT — домен, по которому браузер грузит/качает фото
+# напрямую; при https-приложении нужен https (media-домен через Caddy, шаг 7).
+S3_ACCESS_KEY=kabanos
+S3_SECRET_KEY=<длинный-секрет, напр. openssl rand -hex 24>
 S3_PUBLIC_ENDPOINT=media.example.com
 S3_USE_SSL=true
+# Не нужны фото сейчас? Поставьте S3_ENABLED=false — MinIO и media-домен не понадобятся.
 ```
 
 ### 6. Собрать и запустить стек

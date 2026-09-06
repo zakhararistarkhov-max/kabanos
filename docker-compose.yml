@@ -129,6 +129,10 @@ services:
       NODE_ENV: production
       # Server-side only: the browser never sees this. Points at the API service.
       BACKEND_INTERNAL_URL: http://api:8080
+      # Set COOKIE_SECURE=false for an HTTP-only deploy (plain IP, no TLS) so the
+      # session cookies are accepted by the browser. Leave unset when serving
+      # over HTTPS.
+      COOKIE_SECURE: ${COOKIE_SECURE:-}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     depends_on:

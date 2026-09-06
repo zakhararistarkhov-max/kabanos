@@ -11,11 +11,20 @@ export const COOKIE_REFRESH = "kab_rt";
 
 const isProd = process.env.NODE_ENV === "production";
 
+// The Secure flag defaults to on in production, but can be forced off for an
+// HTTP-only deployment (plain-IP box without TLS, or TLS terminated elsewhere).
+// Over plain HTTP browsers drop Secure cookies, which would break login — so
+// set COOKIE_SECURE=false in that case.
+const cookieSecure =
+  process.env.COOKIE_SECURE != null && process.env.COOKIE_SECURE !== ""
+    ? process.env.COOKIE_SECURE === "true"
+    : isProd;
+
 /** Cookie options shared by both tokens. httpOnly keeps them out of JS reach. */
 export function cookieOptions(maxAgeSeconds: number) {
   return {
     httpOnly: true,
-    secure: isProd,
+    secure: cookieSecure,
     sameSite: "lax" as const,
     path: "/",
     maxAge: maxAgeSeconds,
