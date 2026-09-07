@@ -16,6 +16,7 @@ const NAV = [
   { href: "/exercises", label: "Упражнения", icon: "💪" },
   { href: "/meds", label: "Таблетки", icon: "💊" },
   { href: "/weight", label: "Вес", icon: "⚖️" },
+  { href: "/pressure", label: "Давление", icon: "🩺" },
   { href: "/settings", label: "Настройки", icon: "⚙️" },
 ];
 

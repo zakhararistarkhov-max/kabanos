@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 const STORAGE_KEY = "kabanos:dashboard:layout:v1";
 
 // The default set and order of dashboard widgets for a new user.
-export const DEFAULT_LAYOUT = ["water", "nutrition", "weight", "macros", "training", "meds"];
+export const DEFAULT_LAYOUT = ["water", "nutrition", "weight", "pressure", "macros", "training", "meds"];
 
 // useDashboardLayout persists the user's chosen widgets (which ones and in what
 // order) in localStorage — a per-browser preference, no backend round-trip.

@@ -26,6 +26,7 @@ import (
 	"github.com/kabanos/backend/internal/nutrition"
 	"github.com/kabanos/backend/internal/observability"
 	"github.com/kabanos/backend/internal/postgres"
+	"github.com/kabanos/backend/internal/pressure"
 	"github.com/kabanos/backend/internal/redisx"
 	"github.com/kabanos/backend/internal/storage"
 	"github.com/kabanos/backend/internal/training"
@@ -104,6 +105,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	exerciseRepo := training.NewExerciseRepo(db)
 	workoutRepo := training.NewWorkoutRepo(db)
 	medsRepo := meds.NewRepo(db)
+	pressureRepo := pressure.NewRepo(db)
 
 	// --- services ---
 	authSvc := auth.NewService(db, users, auth.Config{
@@ -118,6 +120,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	nutritionSvc := nutrition.NewService(dishRepo, logRepo, store, weightAdapter{repo: weightRepo})
 	trainingSvc := training.NewService(exerciseRepo, workoutRepo, store)
 	medsSvc := meds.NewService(medsRepo)
+	pressureSvc := pressure.NewService(pressureRepo)
 
 	// --- handlers ---
 	authH := auth.NewHandler(authSvc, users)
@@ -126,6 +129,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	nutritionH := nutrition.NewHandler(nutritionSvc)
 	trainingH := training.NewHandler(trainingSvc)
 	medsH := meds.NewHandler(medsSvc)
+	pressureH := pressure.NewHandler(pressureSvc)
 
 	// --- rate limiters (shared across replicas via Redis) ---
 	authLimiter := httpx.NewRateLimiter(rdb, 20, time.Minute) // brute-force protection
@@ -176,6 +180,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 			r.Mount("/nutrition", nutritionH.Routes())
 			r.Mount("/training", trainingH.Routes())
 			r.Mount("/meds", medsH.Routes())
+			r.Mount("/pressure", pressureH.Routes())
 		})
 	})
 

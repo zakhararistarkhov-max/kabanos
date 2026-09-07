@@ -250,6 +250,33 @@ export interface CatalogComment {
 
 export type MedStatus = "upcoming" | "active" | "finished";
 
+// --- blood pressure ---
+
+export type PressureCategory = "" | "normal" | "elevated" | "high1" | "high2" | "crisis";
+
+export interface PressureEntry {
+  id: string;
+  systolic: number;
+  diastolic: number;
+  pulse: number | null;
+  note: string;
+  measuredAt: string;
+}
+
+export interface PressureAverages {
+  systolic: number | null;
+  diastolic: number | null;
+  pulse: number | null;
+}
+
+export interface PressureSummary {
+  latest: PressureEntry | null;
+  category: PressureCategory;
+  averages: PressureAverages;
+  series: PressureEntry[];
+  count: number;
+}
+
 export interface Medication {
   id: string;
   name: string;

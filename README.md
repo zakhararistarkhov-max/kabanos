@@ -44,6 +44,7 @@
 | **Авторизация** | Регистрация, вход, подтверждение email, сброс пароля, refresh‑токены с ротацией и защитой от повторного использования, профиль (рост, пол, telegram) |
 | **Вода** | Дневная цель, наполнение ёмкости из стакана/бутылок/своего объёма, лог за день, история за 14 дней (график), корректный расчёт «дня» в таймзоне пользователя |
 | **Вес** | Ввод веса и цели, график динамики с целевой линией, расчёт ИМТ и категории ВОЗ, история измерений |
+| **Давление** | Дневник артериального давления и пульса (несколько измерений в день), график систолы/диастолы/пульса с линиями нормы, средние значения и категория по ACC/AHA; блок на дашборде |
 | **Калории и блюда** | Цели БЖУ/ккал, ручной ввод и выбор блюда, разделы «мои / все / избранное», рецепты, фото (S3/MinIO), оценки 1–5 и комментарии, добавление в рацион, сжигание калориями (ручное или MET по весу), дневник за день и история |
 | **Тренировки и упражнения** | Общий каталог упражнений (снаряды, сложность, нагрузка на суставы, кардио/сила, мышцы, фото + видео‑ссылка) и тренировок (упорядоченный список упражнений с подходами/повторами/отдыхом); «мои / все / избранное», оценки 1–5, комментарии |
 | **Таблетки и витамины** | Курсы приёма (доза за приём, число приёмов в день, старт и длительность), дневная «полоска» приёмов с отметкой/отменой, «день X из N», недельная статистика; блок на дашборде |
@@ -249,15 +250,53 @@ docker run -d --name caddy --restart unless-stopped --network host \
 docker compose logs worker | grep "email transport"
 ```
 
-### 9. Обновления, логи, бэкапы
+### 9. Обновление сервиса (выкатка новых изменений)
+Стандартный цикл «подтянуть с гита → перезапустить контейнеры»:
 ```bash
-cd /opt/kabanos && git pull
-docker compose up -d --build          # пересборка + авто-миграции
-docker compose logs -f api worker     # логи (JSON в проде)
-# резервная копия БД:
-docker compose exec -T postgres pg_dump -U kabanos kabanos | gzip > backup-$(date +%F).sql.gz
+cd /opt/kabanos
+git pull                       # подтянуть новую версию кода
+docker compose up -d --build   # пересобрать и перезапустить изменённые сервисы
 ```
-Для бoя рекомендуется managed Postgres с PITR и вынос секретов в секрет‑менеджер
+Что происходит:
+- `--build` пересобирает образы `api` / `worker` / `frontend` из нового кода;
+  Compose перезапускает **только** изменившиеся контейнеры. Postgres/Redis/MinIO
+  не трогаются, данные в томах сохраняются.
+- **Миграции БД применяются сами** при старте `api`/`worker` (под advisory‑lock) —
+  отдельно запускать ничего не нужно.
+
+Проверить, что всё поднялось:
+```bash
+docker compose ps
+curl -s localhost:8080/readyz     # {"status":"ready"}
+docker compose logs -f api worker # логи (Ctrl+C чтобы выйти)
+```
+
+Полезные команды:
+```bash
+# перезапустить сервисы без пересборки (напр. после правки .env):
+docker compose up -d
+
+# принудительно пересоздать один сервис:
+docker compose up -d --build --force-recreate frontend
+
+# статус применённых миграций:
+docker compose exec -T postgres psql -U kabanos -d kabanos -c "select max(version_id) from goose_db_version;"
+
+# бэкап БД перед крупным обновлением:
+docker compose exec -T postgres pg_dump -U kabanos kabanos | gzip > backup-$(date +%F).sql.gz
+
+# откат на предыдущую версию кода:
+git log --oneline -5
+git checkout <нужный-коммит> && docker compose up -d --build
+```
+
+Заметки:
+- `.env` в репозиторий не входит (в `.gitignore`), поэтому `git pull` его не
+  затрёт и не конфликтует. Меняли только `.env` — хватит `docker compose up -d`.
+- Если `git pull` ругается на права (`.git ... Permission denied`) — папку
+  склонировали под `sudo`; верните её себе: `sudo chown -R $USER:$USER /opt/kabanos`.
+
+Для боя рекомендуется managed Postgres с PITR и вынос секретов в секрет‑менеджер
 (детали и чек‑лист — [PRODUCTION.md](PRODUCTION.md)). Для отказоустойчивой
 топологии с репликами — [`docker-compose.scale.yml`](docker-compose.scale.yml).
 
@@ -345,6 +384,8 @@ npm run dev       # http://localhost:3000, ожидает API на :8080
 | CRUD | `/training/workouts…` (`/rating`,`/favorite`,`/comments`) | Программы тренировок (упорядоченные упражнения) |
 | GET/CRUD | `/meds` · `/meds/{id}` | Курсы таблеток/витаминов (доза, приёмов/день, длительность) |
 | POST/DELETE | `/meds/{id}/intake?tz` | Отметить/отменить приём за сегодня |
+| GET | `/pressure/summary?limit` | Дневник давления: серия, средние, последнее + категория |
+| POST/DELETE | `/pressure/entries` · `/pressure/entries/{id}` | Добавить/удалить измерение давления |
 
 Пример:
 
@@ -440,7 +481,7 @@ kabanos/
 │  └─ internal/
 │     ├─ config observability httpx postgres redisx validate timex storage
 │     ├─ auth user           # идентичность, токены, профиль
-│     ├─ water weight        # трекеры (model/repo/service/handler)
+│     ├─ water weight pressure # трекеры (model/repo/service/handler)
 │     ├─ nutrition           # калории, каталог блюд, дневник, активности
 │     ├─ training            # упражнения и тренировки (общий соц‑слой)
 │     ├─ meds                # курсы таблеток/витаминов + трекинг приёмов

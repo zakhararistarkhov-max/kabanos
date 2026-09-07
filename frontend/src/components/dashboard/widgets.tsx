@@ -8,7 +8,9 @@ import { useWeightSummary } from "@/hooks/useWeight";
 import { useNutritionDay } from "@/hooks/useNutrition";
 import { useWorkouts } from "@/hooks/useTraining";
 import { useMeds, useTakeIntake, useUndoIntake } from "@/hooks/useMeds";
+import { usePressureSummary } from "@/hooks/useBloodPressure";
 import { DIFFICULTY_LABELS, DIFFICULTY_STYLE, label } from "@/lib/training";
+import { pressureCat } from "@/lib/pressure";
 
 export interface WidgetMeta {
   id: string;
@@ -145,6 +147,44 @@ function MacrosWidget() {
         </div>
       ) : (
         <Skeleton h="h-24" />
+      )}
+    </CardLink>
+  );
+}
+
+function PressureWidget() {
+  const p = usePressureSummary(30);
+  const d = p.data;
+  const cat = d?.category ? pressureCat(d.category) : undefined;
+  return (
+    <CardLink href="/pressure" icon="🩺" title="Давление" hint="дневник">
+      {d ? (
+        <>
+          <div className="mt-3 stat-value">
+            {d.latest ? (
+              <>
+                {d.latest.systolic}
+                <span className="text-ink-500">/</span>
+                {d.latest.diastolic}
+              </>
+            ) : (
+              "—"
+            )}
+          </div>
+          {cat ? (
+            <span className={`mt-2 inline-block rounded-full px-2 py-0.5 text-xs ${cat.badge}`}>{cat.label}</span>
+          ) : (
+            <div className="mt-1 text-sm text-ink-500">нет измерений</div>
+          )}
+          {d.averages.systolic != null && d.averages.diastolic != null ? (
+            <div className="mt-2 text-sm text-ink-500">
+              среднее {d.averages.systolic}/{d.averages.diastolic}
+              {d.averages.pulse != null ? ` · ♥ ${d.averages.pulse}` : ""}
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <Skeleton />
       )}
     </CardLink>
   );
@@ -288,6 +328,7 @@ export const WIDGETS: WidgetMeta[] = [
   { id: "water", title: "Вода", icon: "💧", span: 1, Component: WaterWidget },
   { id: "nutrition", title: "Калории", icon: "🍎", span: 1, Component: NutritionWidget },
   { id: "weight", title: "Вес", icon: "⚖️", span: 1, Component: WeightWidget },
+  { id: "pressure", title: "Давление", icon: "🩺", span: 1, Component: PressureWidget },
   { id: "macros", title: "Баланс БЖУ", icon: "🥗", span: 1, Component: MacrosWidget },
   { id: "quick", title: "Быстрые действия", icon: "⚡", span: 3, Component: QuickWidget },
   { id: "training", title: "Тренировки", icon: "🏋️", span: 2, Component: TrainingWidget },
