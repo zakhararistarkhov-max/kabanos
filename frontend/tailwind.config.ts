@@ -5,25 +5,28 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Semantic palette echoing the transactional-email design.
+        // Semantic palette driven by CSS variables so light/dark themes swap
+        // globally without touching component classes. The `ink` scale keeps its
+        // dark-theme *roles* (950 = app background … 100 = primary text); the
+        // light theme simply inverts the ramp in globals.css.
         ink: {
-          950: "#0b1120",
-          900: "#0f172a",
-          800: "#1e293b",
-          700: "#334155",
-          500: "#64748b",
-          400: "#94a3b8",
-          300: "#cbd5e1",
-          100: "#e2e8f0",
+          950: "rgb(var(--ink-950) / <alpha-value>)",
+          900: "rgb(var(--ink-900) / <alpha-value>)",
+          800: "rgb(var(--ink-800) / <alpha-value>)",
+          700: "rgb(var(--ink-700) / <alpha-value>)",
+          500: "rgb(var(--ink-500) / <alpha-value>)",
+          400: "rgb(var(--ink-400) / <alpha-value>)",
+          300: "rgb(var(--ink-300) / <alpha-value>)",
+          100: "rgb(var(--ink-100) / <alpha-value>)",
         },
         brand: {
-          DEFAULT: "#38bdf8",
-          strong: "#0ea5e9",
-          soft: "#7dd3fc",
+          DEFAULT: "rgb(var(--brand) / <alpha-value>)",
+          strong: "rgb(var(--brand-strong) / <alpha-value>)",
+          soft: "rgb(var(--brand-soft) / <alpha-value>)",
         },
-        good: "#34d399",
-        warn: "#fbbf24",
-        bad: "#f87171",
+        good: "rgb(var(--good) / <alpha-value>)",
+        warn: "rgb(var(--warn) / <alpha-value>)",
+        bad: "rgb(var(--bad) / <alpha-value>)",
       },
       borderRadius: {
         xl: "0.9rem",

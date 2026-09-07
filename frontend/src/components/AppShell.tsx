@@ -3,21 +3,38 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import {
+  ClipboardList,
+  Droplet,
+  Dumbbell,
+  Flame,
+  HeartPulse,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Pill,
+  Scale,
+  Settings,
+  Utensils,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { authApi } from "@/lib/api";
 import { useSession, useInvalidateSession } from "@/hooks/useSession";
 import { KabanosLogo } from "@/components/Logo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
-const NAV = [
-  { href: "/dashboard", label: "Дашборд", icon: "◆" },
-  { href: "/water", label: "Вода", icon: "💧" },
-  { href: "/nutrition", label: "Калории", icon: "🍎" },
-  { href: "/dishes", label: "Блюда", icon: "🍽️" },
-  { href: "/workouts", label: "Тренировки", icon: "🏋️" },
-  { href: "/exercises", label: "Упражнения", icon: "💪" },
-  { href: "/meds", label: "Таблетки", icon: "💊" },
-  { href: "/weight", label: "Вес", icon: "⚖️" },
-  { href: "/pressure", label: "Давление", icon: "🩺" },
-  { href: "/settings", label: "Настройки", icon: "⚙️" },
+const NAV: { href: string; label: string; Icon: LucideIcon }[] = [
+  { href: "/dashboard", label: "Дашборд", Icon: LayoutDashboard },
+  { href: "/water", label: "Вода", Icon: Droplet },
+  { href: "/nutrition", label: "Калории", Icon: Flame },
+  { href: "/dishes", label: "Блюда", Icon: Utensils },
+  { href: "/workouts", label: "Тренировки", Icon: ClipboardList },
+  { href: "/exercises", label: "Упражнения", Icon: Dumbbell },
+  { href: "/meds", label: "Таблетки", Icon: Pill },
+  { href: "/weight", label: "Вес", Icon: Scale },
+  { href: "/pressure", label: "Давление", Icon: HeartPulse },
+  { href: "/settings", label: "Настройки", Icon: Settings },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -30,7 +47,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const user = data?.user;
 
-  // Close the mobile menu whenever the route changes.
   useEffect(() => {
     setMenuOpen(false);
   }, [pathname]);
@@ -51,30 +67,39 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 border-b border-ink-800 bg-ink-950/80 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 py-3">
-          <Link href="/dashboard" aria-label="Kabanos — на дашборд">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3">
+          <Link href="/dashboard" aria-label="Kabanos — на дашборд" className="shrink-0">
             <KabanosLogo size={32} wordSize="1.05rem" />
           </Link>
 
           {/* desktop nav */}
-          <nav className="hidden items-center gap-1 lg:flex">
-            {NAV.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`rounded-lg px-2.5 py-1.5 text-sm font-medium transition ${
-                  isActive(item.href) ? "bg-ink-800 text-ink-100" : "text-ink-300 hover:bg-ink-800/60"
-                }`}
-              >
-                <span className="mr-1">{item.icon}</span>
-                <span className="hidden xl:inline">{item.label}</span>
-              </Link>
-            ))}
+          <nav className="hidden items-center gap-0.5 lg:flex">
+            {NAV.map(({ href, label, Icon }) => {
+              const active = isActive(href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  title={label}
+                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition ${
+                    active ? "bg-ink-800 text-brand" : "text-ink-400 hover:bg-ink-800/60 hover:text-ink-100"
+                  }`}
+                >
+                  <Icon size={17} strokeWidth={2} className="shrink-0" />
+                  <span className="hidden xl:inline">{label}</span>
+                </Link>
+              );
+            })}
           </nav>
 
-          <div className="flex items-center gap-2">
-            <button onClick={logout} className="hidden text-sm text-ink-500 hover:text-ink-100 lg:block">
-              Выйти
+          <div className="flex items-center gap-1.5">
+            <ThemeToggle />
+            <button
+              onClick={logout}
+              title="Выйти"
+              className="hidden h-9 w-9 place-items-center rounded-lg text-ink-400 transition hover:bg-ink-800 hover:text-ink-100 lg:grid"
+            >
+              <LogOut size={18} />
             </button>
             {/* mobile menu toggle */}
             <button
@@ -83,7 +108,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               aria-label="Меню"
               aria-expanded={menuOpen}
             >
-              <span className="text-lg leading-none">{menuOpen ? "✕" : "☰"}</span>
+              {menuOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
           </div>
         </div>
@@ -91,24 +116,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* mobile dropdown menu */}
         {menuOpen ? (
           <div className="border-t border-ink-800 bg-ink-950/95 lg:hidden">
-            <nav className="mx-auto grid max-w-5xl grid-cols-2 gap-1 px-3 py-3 sm:grid-cols-3">
-              {NAV.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
-                    isActive(item.href) ? "bg-ink-800 text-ink-100" : "text-ink-300 hover:bg-ink-800/60"
-                  }`}
-                >
-                  <span className="text-base">{item.icon}</span>
-                  {item.label}
-                </Link>
-              ))}
+            <nav className="mx-auto grid max-w-6xl grid-cols-2 gap-1 px-3 py-3 sm:grid-cols-3">
+              {NAV.map(({ href, label, Icon }) => {
+                const active = isActive(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                      active ? "bg-ink-800 text-brand" : "text-ink-300 hover:bg-ink-800/60"
+                    }`}
+                  >
+                    <Icon size={18} strokeWidth={2} className="shrink-0" />
+                    {label}
+                  </Link>
+                );
+              })}
               <button
                 onClick={logout}
-                className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-ink-400 hover:bg-ink-800/60"
+                className="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-ink-400 hover:bg-ink-800/60"
               >
-                <span className="text-base">🚪</span>
+                <LogOut size={18} strokeWidth={2} className="shrink-0" />
                 Выйти
               </button>
             </nav>
@@ -118,7 +146,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {user && !user.emailVerified ? (
         <div className="border-b border-warn/30 bg-warn/10">
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 px-4 py-2 text-sm text-warn">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-2 text-sm text-warn">
             <span>Подтвердите email ({user.email}), чтобы не потерять доступ к аккаунту.</span>
             <button onClick={resend} disabled={resent} className="font-semibold underline disabled:no-underline">
               {resent ? "Письмо отправлено" : "Отправить письмо ещё раз"}
@@ -127,7 +155,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       ) : null}
 
-      <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
     </div>
   );
 }

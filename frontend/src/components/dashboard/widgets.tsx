@@ -2,6 +2,19 @@
 
 import Link from "next/link";
 import type { ComponentType } from "react";
+import {
+  ClipboardList,
+  Droplet,
+  Dumbbell,
+  Flame,
+  HeartPulse,
+  Pill,
+  Salad,
+  Scale,
+  Utensils,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 import { PillBar } from "@/components/PillBar";
 import { useWaterDay } from "@/hooks/useWater";
 import { useWeightSummary } from "@/hooks/useWeight";
@@ -15,9 +28,19 @@ import { pressureCat } from "@/lib/pressure";
 export interface WidgetMeta {
   id: string;
   title: string;
-  icon: string;
+  icon: LucideIcon;
   span: 1 | 2 | 3;
   Component: ComponentType;
+}
+
+// IconBadge renders a widget's icon in a rounded square, matching the header
+// treatment across widgets.
+function IconBadge({ Icon }: { Icon: LucideIcon }) {
+  return (
+    <span className="grid h-8 w-8 place-items-center rounded-lg bg-ink-800 text-brand">
+      <Icon size={17} strokeWidth={2} />
+    </span>
+  );
 }
 
 // ---- shared bits ----
@@ -34,12 +57,12 @@ function Bar({ pct, color = "bg-brand" }: { pct: number; color?: string }) {
   );
 }
 
-function CardLink({ href, icon, title, hint, children }: { href: string; icon: string; title: string; hint: string; children: React.ReactNode }) {
+function CardLink({ href, icon, title, hint, children }: { href: string; icon: LucideIcon; title: string; hint: string; children: React.ReactNode }) {
   return (
     <Link href={href} className="card card-interactive block h-full">
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-semibold">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-ink-800 text-base">{icon}</span>
+          <IconBadge Icon={icon} />
           {title}
         </h2>
         <span className="text-sm text-ink-500">{hint} →</span>
@@ -55,7 +78,7 @@ function WaterWidget() {
   const water = useWaterDay();
   const d = water.data;
   return (
-    <CardLink href="/water" icon="💧" title="Вода" hint="сегодня">
+    <CardLink href="/water" icon={Droplet} title="Вода" hint="сегодня">
       {d ? (
         <>
           <div className="mt-3 stat-value">{Math.round(d.percent)}%</div>
@@ -78,7 +101,7 @@ function NutritionWidget() {
   const d = n.data;
   const pct = d && d.goal.kcal > 0 ? (d.consumed.kcal / d.goal.kcal) * 100 : 0;
   return (
-    <CardLink href="/nutrition" icon="🍎" title="Калории" hint="рацион">
+    <CardLink href="/nutrition" icon={Flame} title="Калории" hint="рацион">
       {d ? (
         <>
           <div className="mt-3 stat-value">
@@ -103,7 +126,7 @@ function WeightWidget() {
   const w = useWeightSummary(2);
   const d = w.data;
   return (
-    <CardLink href="/weight" icon="⚖️" title="Вес" hint="подробнее">
+    <CardLink href="/weight" icon={Scale} title="Вес" hint="подробнее">
       {d ? (
         <>
           <div className="mt-3 stat-value">{d.latestKg != null ? `${d.latestKg} кг` : "—"}</div>
@@ -130,7 +153,7 @@ function MacrosWidget() {
       ]
     : [];
   return (
-    <CardLink href="/nutrition" icon="🥗" title="Баланс БЖУ" hint="сегодня">
+    <CardLink href="/nutrition" icon={Salad} title="Баланс БЖУ" hint="сегодня">
       {d ? (
         <div className="mt-3 space-y-2.5">
           {rows.map((r) => (
@@ -157,7 +180,7 @@ function PressureWidget() {
   const d = p.data;
   const cat = d?.category ? pressureCat(d.category) : undefined;
   return (
-    <CardLink href="/pressure" icon="🩺" title="Давление" hint="дневник">
+    <CardLink href="/pressure" icon={HeartPulse} title="Давление" hint="дневник">
       {d ? (
         <>
           <div className="mt-3 stat-value">
@@ -199,7 +222,7 @@ function TrainingWidget() {
     <div className="card h-full">
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-semibold">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-ink-800 text-base">🏋️</span>
+          <IconBadge Icon={ClipboardList} />
           Тренировки
         </h2>
         <Link href="/workouts" className="text-sm text-ink-500 hover:text-ink-100">
@@ -260,7 +283,7 @@ function MedsWidget() {
     <div className="card h-full">
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-semibold">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-ink-800 text-base">💊</span>
+          <IconBadge Icon={Pill} />
           Таблетки и витамины
         </h2>
         <Link href="/meds" className="text-sm text-ink-500 hover:text-ink-100">
@@ -292,18 +315,18 @@ function MedsWidget() {
 }
 
 function QuickWidget() {
-  const actions = [
-    { href: "/water", icon: "💧", label: "Добавить воду" },
-    { href: "/nutrition", icon: "🍎", label: "Записать еду" },
-    { href: "/meds", icon: "💊", label: "Отметить приём" },
-    { href: "/weight", icon: "⚖️", label: "Записать вес" },
-    { href: "/workouts/new", icon: "🏋️", label: "Новая тренировка" },
-    { href: "/dishes/new", icon: "🍽️", label: "Новое блюдо" },
+  const actions: { href: string; Icon: LucideIcon; label: string }[] = [
+    { href: "/water", Icon: Droplet, label: "Добавить воду" },
+    { href: "/nutrition", Icon: Flame, label: "Записать еду" },
+    { href: "/meds", Icon: Pill, label: "Отметить приём" },
+    { href: "/weight", Icon: Scale, label: "Записать вес" },
+    { href: "/workouts/new", Icon: Dumbbell, label: "Новая тренировка" },
+    { href: "/dishes/new", Icon: Utensils, label: "Новое блюдо" },
   ];
   return (
     <div className="card h-full">
       <h2 className="flex items-center gap-2 font-semibold">
-        <span className="grid h-8 w-8 place-items-center rounded-lg bg-ink-800 text-base">⚡</span>
+        <IconBadge Icon={Zap} />
         Быстрые действия
       </h2>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
@@ -311,9 +334,9 @@ function QuickWidget() {
           <Link
             key={a.href + a.label}
             href={a.href}
-            className="flex flex-col items-center gap-1 rounded-xl border border-ink-800 bg-ink-950/40 p-3 text-center text-xs text-ink-300 transition hover:-translate-y-0.5 hover:border-brand/50 hover:text-ink-100"
+            className="flex flex-col items-center gap-1.5 rounded-xl border border-ink-800 bg-ink-950/40 p-3 text-center text-xs text-ink-300 transition hover:-translate-y-0.5 hover:border-brand/50 hover:text-ink-100"
           >
-            <span className="text-xl">{a.icon}</span>
+            <a.Icon size={20} className="text-brand" />
             {a.label}
           </Link>
         ))}
@@ -325,14 +348,14 @@ function QuickWidget() {
 // ---- registry ----
 
 export const WIDGETS: WidgetMeta[] = [
-  { id: "water", title: "Вода", icon: "💧", span: 1, Component: WaterWidget },
-  { id: "nutrition", title: "Калории", icon: "🍎", span: 1, Component: NutritionWidget },
-  { id: "weight", title: "Вес", icon: "⚖️", span: 1, Component: WeightWidget },
-  { id: "pressure", title: "Давление", icon: "🩺", span: 1, Component: PressureWidget },
-  { id: "macros", title: "Баланс БЖУ", icon: "🥗", span: 1, Component: MacrosWidget },
-  { id: "quick", title: "Быстрые действия", icon: "⚡", span: 3, Component: QuickWidget },
-  { id: "training", title: "Тренировки", icon: "🏋️", span: 2, Component: TrainingWidget },
-  { id: "meds", title: "Таблетки", icon: "💊", span: 2, Component: MedsWidget },
+  { id: "water", title: "Вода", icon: Droplet, span: 1, Component: WaterWidget },
+  { id: "nutrition", title: "Калории", icon: Flame, span: 1, Component: NutritionWidget },
+  { id: "weight", title: "Вес", icon: Scale, span: 1, Component: WeightWidget },
+  { id: "pressure", title: "Давление", icon: HeartPulse, span: 1, Component: PressureWidget },
+  { id: "macros", title: "Баланс БЖУ", icon: Salad, span: 1, Component: MacrosWidget },
+  { id: "quick", title: "Быстрые действия", icon: Zap, span: 3, Component: QuickWidget },
+  { id: "training", title: "Тренировки", icon: ClipboardList, span: 2, Component: TrainingWidget },
+  { id: "meds", title: "Таблетки", icon: Pill, span: 2, Component: MedsWidget },
 ];
 
 export const WIDGET_IDS = WIDGETS.map((w) => w.id);

@@ -2,8 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Dark theme (default). Colors are RGB channels consumed as rgb(var(--x) / a)
+   by Tailwind, so light/dark swaps globally by redefining these variables. */
 :root {
+  --ink-950: 11 17 32;
+  --ink-900: 15 23 42;
+  --ink-800: 30 41 59;
+  --ink-700: 51 65 85;
+  --ink-500: 100 116 139;
+  --ink-400: 148 163 184;
+  --ink-300: 203 213 225;
+  --ink-100: 226 232 240;
+  --brand: 56 189 248;
+  --brand-strong: 14 165 233;
+  --brand-soft: 125 211 252;
+  --good: 52 211 153;
+  --warn: 251 191 36;
+  --bad: 248 113 113;
+  --glow-a: 56 189 248;
+  --glow-b: 52 211 153;
   color-scheme: dark;
+}
+
+/* Light theme: the ink ramp is inverted (950 = lightest background … 100 =
+   darkest text) so every existing `bg-ink-950` / `text-ink-100` class just
+   works. Brand is darkened for readable accents on white. */
+:root[data-theme="light"] {
+  --ink-950: 248 250 252;
+  --ink-900: 255 255 255;
+  --ink-800: 226 232 240;
+  --ink-700: 203 213 225;
+  --ink-500: 100 116 139;
+  --ink-400: 71 85 105;
+  --ink-300: 51 65 85;
+  --ink-100: 15 23 42;
+  --brand: 2 132 199;
+  --brand-strong: 3 105 161;
+  --brand-soft: 14 165 233;
+  --good: 22 163 74;
+  --warn: 202 138 4;
+  --bad: 220 38 38;
+  --glow-a: 125 211 252;
+  --glow-b: 134 239 172;
+  color-scheme: light;
 }
 
 html,
@@ -13,8 +54,8 @@ body {
 
 body {
   @apply bg-ink-950 text-ink-100 antialiased;
-  background-image: radial-gradient(1200px 600px at 80% -10%, rgba(56, 189, 248, 0.08), transparent 60%),
-    radial-gradient(900px 500px at 0% 110%, rgba(52, 211, 153, 0.06), transparent 55%);
+  background-image: radial-gradient(1200px 600px at 80% -10%, rgb(var(--glow-a) / 0.1), transparent 60%),
+    radial-gradient(900px 500px at 0% 110%, rgb(var(--glow-b) / 0.08), transparent 55%);
   background-attachment: fixed;
 }
 
@@ -84,7 +125,7 @@ body {
 
 /* Gradient brand text for headings/wordmarks. */
 .text-gradient {
-  background-image: linear-gradient(90deg, #7dd3fc, #38bdf8);
+  background-image: linear-gradient(90deg, rgb(var(--brand-strong)), rgb(var(--brand)));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;

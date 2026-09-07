@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Plus, SlidersHorizontal } from "lucide-react";
 import { useSession } from "@/hooks/useSession";
 import { useDashboardLayout } from "@/hooks/useDashboardLayout";
 import { WIDGET_IDS, spanClass, widgetById } from "@/components/dashboard/widgets";
@@ -28,7 +29,11 @@ export default function DashboardPage() {
           </div>
         </div>
         <button onClick={() => setCustomizing((s) => !s)} className={customizing ? "btn-primary" : "btn-ghost"}>
-          {customizing ? "Готово" : "🧩 Настроить"}
+          {customizing ? "Готово" : (
+            <>
+              <SlidersHorizontal size={16} /> Настроить
+            </>
+          )}
         </button>
       </div>
 
@@ -53,7 +58,9 @@ export default function DashboardPage() {
                   if (!w) return null;
                   return (
                     <li key={id} className="flex items-center gap-2 rounded-xl border border-ink-800 bg-ink-950/40 px-3 py-2">
-                      <span className="grid h-7 w-7 place-items-center rounded-lg bg-ink-800">{w.icon}</span>
+                      <span className="grid h-7 w-7 place-items-center rounded-lg bg-ink-800 text-brand">
+                        <w.icon size={16} strokeWidth={2} />
+                      </span>
                       <span className="flex-1 text-sm font-medium">{w.title}</span>
                       <button onClick={() => move(id, -1)} disabled={i === 0} className="rounded px-1.5 text-ink-500 hover:text-ink-100 disabled:opacity-30">
                         ↑
@@ -81,8 +88,10 @@ export default function DashboardPage() {
                   const w = widgetById(id);
                   if (!w) return null;
                   return (
-                    <button key={id} onClick={() => toggle(id)} className="chip transition hover:border-brand/50 hover:text-ink-100">
-                      + {w.icon} {w.title}
+                    <button key={id} onClick={() => toggle(id)} className="chip inline-flex items-center gap-1.5 transition hover:border-brand/50 hover:text-ink-100">
+                      <Plus size={14} strokeWidth={2.5} />
+                      <w.icon size={14} strokeWidth={2} />
+                      {w.title}
                     </button>
                   );
                 })}
