@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/google/uuid"
@@ -42,17 +43,29 @@ func scanDish(row pgx.Row) (*Dish, error) {
 	return &d, nil
 }
 
-func (r *DishRepo) Create(ctx context.Context, d *Dish) (*Dish, error) {
-	const q = `
-		INSERT INTO dishes (created_by, name, description, recipe, image_key,
-			kcal_per_100g, protein_per_100g, fat_per_100g, carbs_per_100g, serving_grams)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-		RETURNING id`
+func (r *DishRepo) Create(ctx context.Context, d *Dish, ingredients []IngredientInput) (*Dish, error) {
 	var id uuid.UUID
-	err := r.db.Pool.QueryRow(ctx, q,
-		d.CreatedBy, d.Name, d.Description, d.Recipe, d.ImageKey,
-		d.KcalPer100, d.ProteinPer100, d.FatPer100, d.CarbsPer100, d.ServingGrams,
-	).Scan(&id)
+	err := r.inTx(ctx, func(tx pgx.Tx) error {
+		// When composed of ingredients, the parent's per-100g macros and serving
+		// (total yield) are derived from them.
+		if len(ingredients) > 0 {
+			if err := applyIngredientMacros(ctx, tx, d, ingredients); err != nil {
+				return err
+			}
+		}
+		const q = `
+			INSERT INTO dishes (created_by, name, description, recipe, image_key,
+				kcal_per_100g, protein_per_100g, fat_per_100g, carbs_per_100g, serving_grams)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+			RETURNING id`
+		if err := tx.QueryRow(ctx, q,
+			d.CreatedBy, d.Name, d.Description, d.Recipe, d.ImageKey,
+			d.KcalPer100, d.ProteinPer100, d.FatPer100, d.CarbsPer100, d.ServingGrams,
+		).Scan(&id); err != nil {
+			return err
+		}
+		return insertIngredients(ctx, tx, id, ingredients)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -61,24 +74,139 @@ func (r *DishRepo) Create(ctx context.Context, d *Dish) (*Dish, error) {
 
 func (r *DishRepo) GetByID(ctx context.Context, id, viewerID uuid.UUID) (*Dish, error) {
 	q := `SELECT ` + dishColumns + ` FROM dishes d JOIN users u ON u.id = d.created_by WHERE d.id = $2`
-	return scanDish(r.db.Read().QueryRow(ctx, q, viewerID, id))
-}
-
-// Update modifies a dish owned by ownerID. Returns ErrNotFound if the dish does
-// not exist or is not owned by the caller.
-func (r *DishRepo) Update(ctx context.Context, d *Dish, ownerID uuid.UUID) (*Dish, error) {
-	const q = `
-		UPDATE dishes SET name=$3, description=$4, recipe=$5, image_key=$6,
-			kcal_per_100g=$7, protein_per_100g=$8, fat_per_100g=$9, carbs_per_100g=$10,
-			serving_grams=$11, updated_at=now()
-		WHERE id=$1 AND created_by=$2`
-	ct, err := r.db.Pool.Exec(ctx, q, d.ID, ownerID, d.Name, d.Description, d.Recipe, d.ImageKey,
-		d.KcalPer100, d.ProteinPer100, d.FatPer100, d.CarbsPer100, d.ServingGrams)
+	dish, err := scanDish(r.db.Read().QueryRow(ctx, q, viewerID, id))
 	if err != nil {
 		return nil, err
 	}
-	if ct.RowsAffected() == 0 {
-		return nil, postgres.ErrNotFound
+	ings, err := r.listIngredients(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	dish.Ingredients = ings
+	return dish, nil
+}
+
+// listIngredients returns a dish's ingredient lines with each ingredient dish's
+// name and snapshot per-100g macros.
+func (r *DishRepo) listIngredients(ctx context.Context, dishID uuid.UUID) ([]Ingredient, error) {
+	const q = `
+		SELECT di.ingredient_dish_id, d.name, di.grams::float8,
+			d.kcal_per_100g::float8, d.protein_per_100g::float8, d.fat_per_100g::float8, d.carbs_per_100g::float8
+		FROM dish_ingredients di JOIN dishes d ON d.id = di.ingredient_dish_id
+		WHERE di.dish_id = $1 ORDER BY di.position`
+	rows, err := r.db.Read().Query(ctx, q, dishID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Ingredient{}
+	for rows.Next() {
+		var ing Ingredient
+		if err := rows.Scan(&ing.DishID, &ing.Name, &ing.Grams,
+			&ing.Per100.Kcal, &ing.Per100.Protein, &ing.Per100.Fat, &ing.Per100.Carbs); err != nil {
+			return nil, err
+		}
+		out = append(out, ing)
+	}
+	return out, rows.Err()
+}
+
+// applyIngredientMacros fills d's per-100g macros and serving (total grams) from
+// the given ingredients' stored per-100g values. Returns ErrIngredientNotFound
+// if any referenced dish is missing.
+func applyIngredientMacros(ctx context.Context, tx pgx.Tx, d *Dish, ingredients []IngredientInput) error {
+	ids := make([]uuid.UUID, 0, len(ingredients))
+	for _, ing := range ingredients {
+		ids = append(ids, ing.DishID)
+	}
+	per100 := map[uuid.UUID]Macros{}
+	rows, err := tx.Query(ctx, `
+		SELECT id, kcal_per_100g::float8, protein_per_100g::float8, fat_per_100g::float8, carbs_per_100g::float8
+		FROM dishes WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id uuid.UUID
+		var m Macros
+		if err := rows.Scan(&id, &m.Kcal, &m.Protein, &m.Fat, &m.Carbs); err != nil {
+			return err
+		}
+		per100[id] = m
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	var total Macros
+	var totalG float64
+	for _, ing := range ingredients {
+		m, ok := per100[ing.DishID]
+		if !ok {
+			return ErrIngredientNotFound
+		}
+		f := ing.Grams / 100.0
+		total.Kcal += m.Kcal * f
+		total.Protein += m.Protein * f
+		total.Fat += m.Fat * f
+		total.Carbs += m.Carbs * f
+		totalG += ing.Grams
+	}
+	if totalG <= 0 {
+		return ErrIngredientNotFound
+	}
+	scale := 100.0 / totalG
+	d.KcalPer100 = round2(total.Kcal * scale)
+	d.ProteinPer100 = round2(total.Protein * scale)
+	d.FatPer100 = round2(total.Fat * scale)
+	d.CarbsPer100 = round2(total.Carbs * scale)
+	g := round2(totalG)
+	d.ServingGrams = &g
+	return nil
+}
+
+func insertIngredients(ctx context.Context, tx pgx.Tx, dishID uuid.UUID, ingredients []IngredientInput) error {
+	const q = `INSERT INTO dish_ingredients (dish_id, ingredient_dish_id, grams, position) VALUES ($1,$2,$3,$4)`
+	for i, ing := range ingredients {
+		if _, err := tx.Exec(ctx, q, dishID, ing.DishID, ing.Grams, i); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func round2(f float64) float64 { return math.Round(f*100) / 100 }
+
+// Update modifies a dish owned by ownerID and replaces its ingredient list.
+// Returns ErrNotFound if the dish does not exist or is not owned by the caller.
+func (r *DishRepo) Update(ctx context.Context, d *Dish, ingredients []IngredientInput, ownerID uuid.UUID) (*Dish, error) {
+	err := r.inTx(ctx, func(tx pgx.Tx) error {
+		if len(ingredients) > 0 {
+			if err := applyIngredientMacros(ctx, tx, d, ingredients); err != nil {
+				return err
+			}
+		}
+		const q = `
+			UPDATE dishes SET name=$3, description=$4, recipe=$5, image_key=$6,
+				kcal_per_100g=$7, protein_per_100g=$8, fat_per_100g=$9, carbs_per_100g=$10,
+				serving_grams=$11, updated_at=now()
+			WHERE id=$1 AND created_by=$2`
+		ct, err := tx.Exec(ctx, q, d.ID, ownerID, d.Name, d.Description, d.Recipe, d.ImageKey,
+			d.KcalPer100, d.ProteinPer100, d.FatPer100, d.CarbsPer100, d.ServingGrams)
+		if err != nil {
+			return err
+		}
+		if ct.RowsAffected() == 0 {
+			return postgres.ErrNotFound
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM dish_ingredients WHERE dish_id=$1`, d.ID); err != nil {
+			return err
+		}
+		return insertIngredients(ctx, tx, d.ID, ingredients)
+	})
+	if err != nil {
+		return nil, err
 	}
 	return r.GetByID(ctx, d.ID, ownerID)
 }

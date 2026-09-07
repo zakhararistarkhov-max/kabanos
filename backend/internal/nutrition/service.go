@@ -20,6 +20,7 @@ var (
 	ErrInvalidActivity = errors.New("provide either kcal, or an activity type/MET with duration")
 	ErrUnsupportedMedia = errors.New("unsupported image type")
 	ErrStorageDisabled  = errors.New("image storage is disabled")
+	ErrIngredientNotFound = errors.New("ingredient dish not found")
 )
 
 // imageExtensions maps accepted content types to file extensions.
@@ -72,9 +73,11 @@ func (s *Service) SetGoal(ctx context.Context, userID uuid.UUID, g Goal) (Goal, 
 
 // --- dishes (thin passthroughs; ownership enforced in repo) ---
 
-func (s *Service) CreateDish(ctx context.Context, d *Dish) (*Dish, error) { return s.dishes.Create(ctx, d) }
-func (s *Service) UpdateDish(ctx context.Context, d *Dish, owner uuid.UUID) (*Dish, error) {
-	return s.dishes.Update(ctx, d, owner)
+func (s *Service) CreateDish(ctx context.Context, d *Dish, ingredients []IngredientInput) (*Dish, error) {
+	return s.dishes.Create(ctx, d, ingredients)
+}
+func (s *Service) UpdateDish(ctx context.Context, d *Dish, ingredients []IngredientInput, owner uuid.UUID) (*Dish, error) {
+	return s.dishes.Update(ctx, d, ingredients, owner)
 }
 func (s *Service) DeleteDish(ctx context.Context, id, owner uuid.UUID) error {
 	return s.dishes.Delete(ctx, id, owner)

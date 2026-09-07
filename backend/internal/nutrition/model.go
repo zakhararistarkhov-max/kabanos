@@ -38,6 +38,8 @@ type Dish struct {
 	AuthorName string
 	IsFavorite bool
 	MyRating   *int
+	// Populated on the detail endpoint: the dishes this one is composed of.
+	Ingredients []Ingredient
 }
 
 // AvgRating returns the mean rating, or 0 when there are none.
@@ -46,6 +48,29 @@ func (d *Dish) AvgRating() float64 {
 		return 0
 	}
 	return float64(d.RatingSum) / float64(d.RatingCount)
+}
+
+// Ingredient is one component of a composed dish: a reference to another dish
+// plus how many grams of it go in. Per100 is a snapshot of the ingredient
+// dish's per-100g macros.
+type Ingredient struct {
+	DishID uuid.UUID
+	Name   string
+	Grams  float64
+	Per100 Macros
+}
+
+// Contribution returns the macros this ingredient contributes (Per100 scaled by
+// its grams).
+func (i Ingredient) Contribution() Macros {
+	f := i.Grams / 100.0
+	return Macros{Kcal: i.Per100.Kcal * f, Protein: i.Per100.Protein * f, Fat: i.Per100.Fat * f, Carbs: i.Per100.Carbs * f}
+}
+
+// IngredientInput is a component supplied when creating/updating a dish.
+type IngredientInput struct {
+	DishID uuid.UUID
+	Grams  float64
 }
 
 type Comment struct {

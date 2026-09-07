@@ -142,6 +142,28 @@ export default function DishDetailPage() {
             </div>
           </div>
 
+          {d.ingredients && d.ingredients.length > 0 ? (
+            <div className="card">
+              <h2 className="mb-3 font-semibold">Состав</h2>
+              <ul className="space-y-2">
+                {d.ingredients.map((ing) => (
+                  <li key={ing.dishId} className="flex items-center justify-between gap-2 rounded-xl bg-ink-800/40 px-3 py-2 text-sm">
+                    <div className="min-w-0">
+                      <Link href={`/dishes/${ing.dishId}`} className="font-medium hover:text-brand">
+                        {ing.name}
+                      </Link>
+                      <span className="ml-2 text-ink-500">{ing.grams} г</span>
+                    </div>
+                    <div className="shrink-0 text-right text-ink-500">
+                      {Math.round(ing.contribution.kcal)} ккал · Б{ing.contribution.protein} Ж{ing.contribution.fat} У{ing.contribution.carbs}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-ink-500">КБЖУ блюда рассчитано из состава.</p>
+            </div>
+          ) : null}
+
           {d.recipe ? (
             <div className="card">
               <h2 className="mb-2 font-semibold">Рецепт</h2>

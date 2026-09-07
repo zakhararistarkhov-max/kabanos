@@ -127,6 +127,14 @@ export interface ActivityType {
   met: number;
 }
 
+export interface DishIngredient {
+  dishId: string;
+  name: string;
+  grams: number;
+  per100g: Macros;
+  contribution: Macros;
+}
+
 export interface Dish {
   id: string;
   name: string;
@@ -142,6 +150,7 @@ export interface Dish {
   isMine: boolean;
   authorName: string;
   createdAt: string;
+  ingredients: DishIngredient[];
 }
 
 export interface DishComment {

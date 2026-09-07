@@ -64,24 +64,42 @@ type macrosDTO struct {
 	Carbs   float64 `json:"carbs"`
 }
 
+type ingredientDTO struct {
+	DishID       string    `json:"dishId"`
+	Name         string    `json:"name"`
+	Grams        float64   `json:"grams"`
+	Per100       macrosDTO `json:"per100g"`
+	Contribution macrosDTO `json:"contribution"`
+}
+
 type dishDTO struct {
-	ID            string     `json:"id"`
-	Name          string     `json:"name"`
-	Description   string     `json:"description"`
-	Recipe        string     `json:"recipe"`
-	ImageURL      *string    `json:"imageUrl"`
-	Per100        macrosDTO  `json:"per100g"`
-	ServingGrams  *float64   `json:"servingGrams"`
-	RatingAvg     float64    `json:"ratingAvg"`
-	RatingCount   int        `json:"ratingCount"`
-	MyRating      *int       `json:"myRating"`
-	IsFavorite    bool       `json:"isFavorite"`
-	IsMine        bool       `json:"isMine"`
-	AuthorName    string     `json:"authorName"`
-	CreatedAt     time.Time  `json:"createdAt"`
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	Description  string          `json:"description"`
+	Recipe       string          `json:"recipe"`
+	ImageURL     *string         `json:"imageUrl"`
+	Per100       macrosDTO       `json:"per100g"`
+	ServingGrams *float64        `json:"servingGrams"`
+	RatingAvg    float64         `json:"ratingAvg"`
+	RatingCount  int             `json:"ratingCount"`
+	MyRating     *int            `json:"myRating"`
+	IsFavorite   bool            `json:"isFavorite"`
+	IsMine       bool            `json:"isMine"`
+	AuthorName   string          `json:"authorName"`
+	CreatedAt    time.Time       `json:"createdAt"`
+	Ingredients  []ingredientDTO `json:"ingredients"`
 }
 
 func (h *Handler) toDishDTO(r *http.Request, d *Dish, viewer uuid.UUID) dishDTO {
+	ings := make([]ingredientDTO, 0, len(d.Ingredients))
+	for _, ing := range d.Ingredients {
+		c := ing.Contribution()
+		ings = append(ings, ingredientDTO{
+			DishID: ing.DishID.String(), Name: ing.Name, Grams: ing.Grams,
+			Per100:       macrosDTO{ing.Per100.Kcal, ing.Per100.Protein, ing.Per100.Fat, ing.Per100.Carbs},
+			Contribution: macrosDTO{round1(c.Kcal), round1(c.Protein), round1(c.Fat), round1(c.Carbs)},
+		})
+	}
 	return dishDTO{
 		ID:           d.ID.String(),
 		Name:         d.Name,
@@ -97,6 +115,7 @@ func (h *Handler) toDishDTO(r *http.Request, d *Dish, viewer uuid.UUID) dishDTO 
 		IsMine:       d.CreatedBy == viewer,
 		AuthorName:   d.AuthorName,
 		CreatedAt:    d.CreatedAt,
+		Ingredients:  ings,
 	}
 }
 
@@ -295,33 +314,57 @@ func (h *Handler) listDishes(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]any{"items": items, "total": total, "page": page, "limit": limit})
 }
 
-type dishRequest struct {
-	Name          string   `json:"name"`
-	Description   string   `json:"description"`
-	Recipe        string   `json:"recipe"`
-	ImageKey      *string  `json:"imageKey"`
-	KcalPer100    float64  `json:"kcalPer100"`
-	ProteinPer100 float64  `json:"proteinPer100"`
-	FatPer100     float64  `json:"fatPer100"`
-	CarbsPer100   float64  `json:"carbsPer100"`
-	ServingGrams  *float64 `json:"servingGrams"`
+type ingredientReq struct {
+	DishID string  `json:"dishId"`
+	Grams  float64 `json:"grams"`
 }
 
-func (req *dishRequest) validated() *httpx.APIError {
+type dishRequest struct {
+	Name          string          `json:"name"`
+	Description   string          `json:"description"`
+	Recipe        string          `json:"recipe"`
+	ImageKey      *string         `json:"imageKey"`
+	KcalPer100    float64         `json:"kcalPer100"`
+	ProteinPer100 float64         `json:"proteinPer100"`
+	FatPer100     float64         `json:"fatPer100"`
+	CarbsPer100   float64         `json:"carbsPer100"`
+	ServingGrams  *float64        `json:"servingGrams"`
+	Ingredients   []ingredientReq `json:"ingredients"`
+}
+
+// validated checks the request and parses ingredient references. For a composed
+// dish (ingredients present) the macro fields are computed server-side, so their
+// range checks are skipped.
+func (req *dishRequest) validated() ([]IngredientInput, *httpx.APIError) {
 	v := validate.New()
 	v.Required("name", req.Name)
 	v.MaxLen("name", req.Name, 140)
 	v.MaxLen("description", req.Description, 2000)
 	v.MaxLen("recipe", req.Recipe, 8000)
-	v.Check(req.KcalPer100 >= 0 && req.KcalPer100 <= 1000, "kcalPer100", "must be between 0 and 1000")
-	v.Check(req.ProteinPer100 >= 0 && req.FatPer100 >= 0 && req.CarbsPer100 >= 0, "macros", "must be non-negative")
-	if req.ServingGrams != nil {
-		v.Check(*req.ServingGrams > 0 && *req.ServingGrams <= 5000, "servingGrams", "must be between 1 and 5000")
+
+	ingredients := make([]IngredientInput, 0, len(req.Ingredients))
+	for i, ing := range req.Ingredients {
+		id, err := uuid.Parse(ing.DishID)
+		if err != nil {
+			v.Check(false, "ingredients", "invalid ingredient reference at position "+strconv.Itoa(i+1))
+			continue
+		}
+		v.Check(ing.Grams > 0 && ing.Grams <= 100000, "ingredients", "grams must be between 1 and 100000")
+		ingredients = append(ingredients, IngredientInput{DishID: id, Grams: ing.Grams})
+	}
+	v.Check(len(ingredients) <= 50, "ingredients", "too many ingredients")
+
+	if len(ingredients) == 0 {
+		v.Check(req.KcalPer100 >= 0 && req.KcalPer100 <= 1000, "kcalPer100", "must be between 0 and 1000")
+		v.Check(req.ProteinPer100 >= 0 && req.FatPer100 >= 0 && req.CarbsPer100 >= 0, "macros", "must be non-negative")
+		if req.ServingGrams != nil {
+			v.Check(*req.ServingGrams > 0 && *req.ServingGrams <= 5000, "servingGrams", "must be between 1 and 5000")
+		}
 	}
 	if !v.Valid() {
-		return httpx.ValidationError(v.Errors)
+		return nil, httpx.ValidationError(v.Errors)
 	}
-	return nil
+	return ingredients, nil
 }
 
 func (h *Handler) createDish(w http.ResponseWriter, r *http.Request) {
@@ -330,7 +373,8 @@ func (h *Handler) createDish(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, err)
 		return
 	}
-	if apiErr := req.validated(); apiErr != nil {
+	ingredients, apiErr := req.validated()
+	if apiErr != nil {
 		httpx.Error(w, r, apiErr)
 		return
 	}
@@ -339,12 +383,26 @@ func (h *Handler) createDish(w http.ResponseWriter, r *http.Request) {
 		CreatedBy: viewer, Name: req.Name, Description: req.Description, Recipe: req.Recipe,
 		ImageKey: req.ImageKey, KcalPer100: req.KcalPer100, ProteinPer100: req.ProteinPer100,
 		FatPer100: req.FatPer100, CarbsPer100: req.CarbsPer100, ServingGrams: req.ServingGrams,
-	})
+	}, ingredients)
 	if err != nil {
-		httpx.Error(w, r, err)
+		h.renderDishSaveErr(w, r, err, "")
 		return
 	}
 	httpx.JSON(w, http.StatusCreated, h.toDishDTO(r, d, viewer))
+}
+
+// renderDishSaveErr maps composed-dish errors to 400 and otherwise defers to the
+// standard not-found/internal handling.
+func (h *Handler) renderDishSaveErr(w http.ResponseWriter, r *http.Request, err error, notFoundMsg string) {
+	if errors.Is(err, ErrIngredientNotFound) {
+		httpx.Error(w, r, httpx.ErrBadRequest("одно из блюд-ингредиентов не найдено"))
+		return
+	}
+	if notFoundMsg != "" {
+		h.renderErr(w, r, err, notFoundMsg)
+		return
+	}
+	httpx.Error(w, r, err)
 }
 
 func (h *Handler) getDish(w http.ResponseWriter, r *http.Request) {
@@ -371,7 +429,8 @@ func (h *Handler) updateDish(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, err)
 		return
 	}
-	if apiErr := req.validated(); apiErr != nil {
+	ingredients, apiErr := req.validated()
+	if apiErr != nil {
 		httpx.Error(w, r, apiErr)
 		return
 	}
@@ -380,9 +439,9 @@ func (h *Handler) updateDish(w http.ResponseWriter, r *http.Request) {
 		ID: id, Name: req.Name, Description: req.Description, Recipe: req.Recipe,
 		ImageKey: req.ImageKey, KcalPer100: req.KcalPer100, ProteinPer100: req.ProteinPer100,
 		FatPer100: req.FatPer100, CarbsPer100: req.CarbsPer100, ServingGrams: req.ServingGrams,
-	}, viewer)
+	}, ingredients, viewer)
 	if err != nil {
-		h.renderErr(w, r, err, "dish not found or not yours")
+		h.renderDishSaveErr(w, r, err, "dish not found or not yours")
 		return
 	}
 	httpx.JSON(w, http.StatusOK, h.toDishDTO(r, d, viewer))
