@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ComponentType } from "react";
 import {
+  BookText,
   ClipboardList,
   Droplet,
   Dumbbell,
@@ -16,12 +17,14 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { PillBar } from "@/components/PillBar";
+import { todayISO } from "@/lib/api";
 import { useWaterDay } from "@/hooks/useWater";
 import { useWeightSummary } from "@/hooks/useWeight";
 import { useNutritionDay } from "@/hooks/useNutrition";
 import { useWorkouts } from "@/hooks/useTraining";
 import { useMeds, useTakeIntake, useUndoIntake } from "@/hooks/useMeds";
 import { usePressureSummary } from "@/hooks/useBloodPressure";
+import { useDiaryDay } from "@/hooks/useDiary";
 import { DIFFICULTY_LABELS, DIFFICULTY_STYLE, label } from "@/lib/training";
 import { pressureCat } from "@/lib/pressure";
 
@@ -213,6 +216,29 @@ function PressureWidget() {
   );
 }
 
+function DiaryWidget() {
+  const day = useDiaryDay(todayISO());
+  const items = day.data?.items ?? [];
+  const last = items[items.length - 1];
+  return (
+    <CardLink href="/diary" icon={BookText} title="Дневник" hint="сегодня">
+      {day.data ? (
+        items.length > 0 ? (
+          <>
+            <div className="mt-3 stat-value">{items.length}</div>
+            <div className="mt-1 text-sm text-ink-500">{items.length === 1 ? "запись за сегодня" : "записей за сегодня"}</div>
+            {last?.body ? <p className="mt-2 line-clamp-2 text-sm text-ink-400">{last.body}</p> : null}
+          </>
+        ) : (
+          <p className="mt-3 text-sm text-ink-500">Сегодня записей нет. Добавьте текст, фото или видео.</p>
+        )
+      ) : (
+        <Skeleton />
+      )}
+    </CardLink>
+  );
+}
+
 // ---- rich widgets ----
 
 function TrainingWidget() {
@@ -320,6 +346,8 @@ function QuickWidget() {
     { href: "/nutrition", Icon: Flame, label: "Записать еду" },
     { href: "/meds", Icon: Pill, label: "Отметить приём" },
     { href: "/weight", Icon: Scale, label: "Записать вес" },
+    { href: "/pressure", Icon: HeartPulse, label: "Записать давление" },
+    { href: "/diary", Icon: BookText, label: "Запись в дневник" },
     { href: "/workouts/new", Icon: Dumbbell, label: "Новая тренировка" },
     { href: "/dishes/new", Icon: Utensils, label: "Новое блюдо" },
   ];
@@ -352,6 +380,7 @@ export const WIDGETS: WidgetMeta[] = [
   { id: "nutrition", title: "Калории", icon: Flame, span: 1, Component: NutritionWidget },
   { id: "weight", title: "Вес", icon: Scale, span: 1, Component: WeightWidget },
   { id: "pressure", title: "Давление", icon: HeartPulse, span: 1, Component: PressureWidget },
+  { id: "diary", title: "Дневник", icon: BookText, span: 1, Component: DiaryWidget },
   { id: "macros", title: "Баланс БЖУ", icon: Salad, span: 1, Component: MacrosWidget },
   { id: "quick", title: "Быстрые действия", icon: Zap, span: 3, Component: QuickWidget },
   { id: "training", title: "Тренировки", icon: ClipboardList, span: 2, Component: TrainingWidget },

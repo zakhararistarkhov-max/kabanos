@@ -6,7 +6,7 @@ const STORAGE_KEY = "kabanos:dashboard:layout:v2";
 const LEGACY_KEY = "kabanos:dashboard:layout:v1";
 
 // The default set and order of dashboard widgets for a new user.
-export const DEFAULT_LAYOUT = ["water", "nutrition", "weight", "pressure", "macros", "training", "meds"];
+export const DEFAULT_LAYOUT = ["water", "nutrition", "weight", "pressure", "diary", "macros", "training", "meds"];
 
 interface Stored {
   order: string[]; // enabled widgets, in display order
