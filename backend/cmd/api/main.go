@@ -28,7 +28,9 @@ import (
 	"github.com/kabanos/backend/internal/observability"
 	"github.com/kabanos/backend/internal/postgres"
 	"github.com/kabanos/backend/internal/pressure"
+	"github.com/kabanos/backend/internal/push"
 	"github.com/kabanos/backend/internal/redisx"
+	"github.com/kabanos/backend/internal/reminders"
 	"github.com/kabanos/backend/internal/storage"
 	"github.com/kabanos/backend/internal/training"
 	"github.com/kabanos/backend/internal/user"
@@ -108,6 +110,8 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	medsRepo := meds.NewRepo(db)
 	pressureRepo := pressure.NewRepo(db)
 	diaryRepo := diary.NewRepo(db)
+	pushRepo := push.NewRepo(db)
+	remindersRepo := reminders.NewRepo(db)
 
 	// --- services ---
 	authSvc := auth.NewService(db, users, auth.Config{
@@ -124,6 +128,8 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	medsSvc := meds.NewService(medsRepo)
 	pressureSvc := pressure.NewService(pressureRepo)
 	diarySvc := diary.NewService(diaryRepo, store)
+	pushSvc := push.NewService(pushRepo, cfg.VAPID, logger)
+	remindersSvc := reminders.NewService(remindersRepo)
 
 	// --- handlers ---
 	authH := auth.NewHandler(authSvc, users)
@@ -134,6 +140,8 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	medsH := meds.NewHandler(medsSvc)
 	pressureH := pressure.NewHandler(pressureSvc)
 	diaryH := diary.NewHandler(diarySvc)
+	pushH := push.NewHandler(pushSvc)
+	remindersH := reminders.NewHandler(remindersSvc)
 
 	// --- rate limiters (shared across replicas via Redis) ---
 	authLimiter := httpx.NewRateLimiter(rdb, 20, time.Minute) // brute-force protection
@@ -186,6 +194,8 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 			r.Mount("/meds", medsH.Routes())
 			r.Mount("/pressure", pressureH.Routes())
 			r.Mount("/diary", diaryH.Routes())
+			r.Mount("/push", pushH.Routes())
+			r.Mount("/reminders", remindersH.Routes())
 		})
 	})
 

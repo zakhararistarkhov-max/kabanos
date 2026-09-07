@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Bell } from "lucide-react";
 import { Field } from "@/components/Field";
 import { api, ApiRequestError } from "@/lib/api";
 import { useInvalidateSession, useSession } from "@/hooks/useSession";
+import { usePush } from "@/hooks/usePush";
 import type { User } from "@/lib/types";
 
 export default function SettingsPage() {
@@ -90,11 +92,72 @@ export default function SettingsPage() {
         </div>
       </form>
 
+      <NotificationsCard />
+
       <div className="card text-sm text-ink-500">
         <div className="text-ink-300">Аккаунт</div>
         <div className="mt-1">{user?.email}</div>
         <div className="mt-1">{user?.emailVerified ? "Email подтверждён ✓" : "Email не подтверждён"}</div>
       </div>
+    </div>
+  );
+}
+
+function NotificationsCard() {
+  const push = usePush();
+  const [tested, setTested] = useState(false);
+
+  let hint: string | null = null;
+  if (!push.loading) {
+    if (!push.supported) hint = "Ваш браузер не поддерживает push-уведомления.";
+    else if (!push.secure) hint = "Уведомления работают только по HTTPS. Откройте сайт по защищённому адресу (https://…).";
+    else if (!push.configured) hint = "Push не настроен на сервере (не заданы VAPID-ключи).";
+  }
+  const canToggle = push.supported && push.secure && push.configured && !push.loading;
+
+  async function onTest() {
+    await push.test();
+    setTested(true);
+    setTimeout(() => setTested(false), 3000);
+  }
+
+  return (
+    <div className="card space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-ink-800 text-brand">
+          <Bell size={17} />
+        </span>
+        <div>
+          <h2 className="font-semibold">Уведомления</h2>
+          <p className="text-sm text-ink-500">Пуш‑уведомления на это устройство (телефон/ноут), даже когда сайт закрыт.</p>
+        </div>
+      </div>
+
+      {hint ? (
+        <p className="rounded-xl bg-ink-800/50 px-3 py-2 text-sm text-ink-400">{hint}</p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          {push.subscribed ? (
+            <>
+              <button onClick={push.disable} disabled={push.loading || !canToggle} className="btn-ghost">
+                Отключить на этом устройстве
+              </button>
+              <button onClick={onTest} className="btn-primary">
+                {tested ? "Отправлено ✓" : "Отправить тестовое"}
+              </button>
+              <span className="text-sm text-good">Включены ✓</span>
+            </>
+          ) : (
+            <button onClick={push.enable} disabled={push.loading || !canToggle} className="btn-primary">
+              {push.loading ? "…" : "Включить уведомления"}
+            </button>
+          )}
+        </div>
+      )}
+      {push.error ? <p className="field-error">{push.error}</p> : null}
+      <p className="text-xs text-ink-500">
+        На iPhone уведомления доступны только для сайта, добавленного на экран «Домой» (iOS 16.4+). Разрешение спрашивается один раз.
+      </p>
     </div>
   );
 }

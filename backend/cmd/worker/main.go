@@ -24,12 +24,15 @@ import (
 	"github.com/kabanos/backend/internal/observability"
 	"github.com/kabanos/backend/internal/outbox"
 	"github.com/kabanos/backend/internal/postgres"
+	"github.com/kabanos/backend/internal/push"
+	"github.com/kabanos/backend/internal/reminders"
 )
 
 const (
-	pollInterval = 2 * time.Second
-	batchSize    = 20
-	maxAttempts  = 5
+	pollInterval     = 2 * time.Second
+	reminderInterval = time.Minute
+	batchSize        = 20
+	maxAttempts      = 5
 )
 
 func main() {
@@ -69,6 +72,9 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	tg := notify.NewTelegram(cfg.Telegram.BotToken)
 	d := &dispatcher{mail: mail, tg: tg}
 
+	pushSvc := push.NewService(push.NewRepo(db), cfg.VAPID, logger)
+	remRepo := reminders.NewRepo(db)
+
 	// Make the effective mail destination unmistakable in the logs — the #1
 	// source of "why didn't my email arrive?" is SMTP still pointing at the dev
 	// catcher (Mailpit), which never delivers to real inboxes.
@@ -81,9 +87,14 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 		logger.Warn("SMTP is a DEV mail catcher — email is captured locally and NOT delivered to real inboxes; set SMTP_HOST/PORT/USERNAME/PASSWORD in .env for real delivery")
 	}
 
-	logger.Info("worker started", slog.Duration("poll_interval", pollInterval))
+	logger.Info("worker started",
+		slog.Duration("poll_interval", pollInterval),
+		slog.Bool("push_enabled", pushSvc.Enabled()),
+	)
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
+	remTicker := time.NewTicker(reminderInterval)
+	defer remTicker.Stop()
 
 	for {
 		select {
@@ -91,8 +102,68 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 			return nil
 		case <-ticker.C:
 			processBatch(ctx, box, d, logger)
+		case <-remTicker.C:
+			processReminders(ctx, remRepo, pushSvc, logger)
 		}
 	}
+}
+
+// processReminders evaluates every enabled reminder and pushes the due ones.
+// ClaimFire makes delivery safe across multiple worker replicas (only one wins
+// each occurrence).
+func processReminders(ctx context.Context, repo *reminders.Repo, pushSvc *push.Service, logger *slog.Logger) {
+	if !pushSvc.Enabled() {
+		return
+	}
+	list, err := repo.ListEnabled(ctx)
+	if err != nil {
+		logger.Error("list reminders", slog.String("error", err.Error()))
+		return
+	}
+	now := time.Now()
+	for _, rem := range list {
+		if !rem.DueAt(now) {
+			continue
+		}
+		if rem.Condition != "" {
+			ok, err := conditionMet(ctx, repo, rem, now)
+			if err != nil {
+				logger.Error("reminder condition", slog.String("error", err.Error()))
+				continue
+			}
+			if !ok {
+				continue // goal already met — skip without claiming, retry later
+			}
+		}
+		claimed, err := repo.ClaimFire(ctx, rem.ID, rem.LastFiredAt, now)
+		if err != nil {
+			logger.Error("claim reminder", slog.String("error", err.Error()))
+			continue
+		}
+		if !claimed {
+			continue // another replica handled it
+		}
+		if _, err := pushSvc.Send(ctx, rem.UserID, push.Notification{Title: rem.Title, Body: rem.Body, URL: rem.URL}); err != nil {
+			logger.Error("send reminder push", slog.String("error", err.Error()))
+		}
+	}
+}
+
+// conditionMet checks a reminder's suppression condition against live data.
+func conditionMet(ctx context.Context, repo *reminders.Repo, rem reminders.Reminder, now time.Time) (bool, error) {
+	loc, err := time.LoadLocation(rem.Timezone)
+	if err != nil {
+		loc = time.UTC
+	}
+	local := now.In(loc)
+	switch rem.Condition {
+	case "water_below_goal":
+		from := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc)
+		return repo.WaterBelowGoal(ctx, rem.UserID, from, from.AddDate(0, 0, 1))
+	case "meds_due":
+		return repo.MedsDue(ctx, rem.UserID, local.Format("2006-01-02"))
+	}
+	return true, nil
 }
 
 func processBatch(ctx context.Context, box *outbox.Repo, d *dispatcher, logger *slog.Logger) {

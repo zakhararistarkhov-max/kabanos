@@ -5,6 +5,8 @@ import { Providers } from "./providers";
 export const metadata: Metadata = {
   title: "Kabanos — здоровье под контролем",
   description: "Вода, вес, калории, тренировки и таблетки — в одном месте.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Kabanos" },
 };
 
 export const viewport: Viewport = {

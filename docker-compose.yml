@@ -24,6 +24,11 @@ x-backend-env: &backend-env
   MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL:-no-reply@kabanos.local}
   MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Kabanos}
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  # Web Push (browser/PWA notifications). Dev defaults below; regenerate for
+  # production with `docker compose run --rm api /app/... ` or `go run ./cmd/vapid`.
+  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-BCxtdy1kBbsazVKjla_n449-34-iOqt3dPJypl3xF6X2AFumHrjOEDc-0aqAt3MUpSQcFgiU8U8yD7J17QVb-sY}
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-l2N8pP5raUWVzzzSABBcNQnZrXIivFpguQRjgsMSy-0}
+  VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@kabanos.local}
   # Object storage for dish photos. Endpoint is internal; public endpoint is
   # what the browser uses (presigned URLs are signed for it).
   S3_ENDPOINT: minio:9000

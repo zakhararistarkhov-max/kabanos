@@ -312,6 +312,28 @@ export interface DiaryDateCount {
   count: number;
 }
 
+// --- reminders ---
+
+export type ReminderMode = "interval" | "times";
+export type ReminderCondition = "" | "water_below_goal" | "meds_due";
+
+export interface Reminder {
+  id: string;
+  title: string;
+  body: string;
+  url: string;
+  mode: ReminderMode;
+  intervalMinutes: number | null;
+  windowStart: string;
+  windowEnd: string;
+  times: string[];
+  days: number[];
+  condition: ReminderCondition;
+  timezone: string;
+  enabled: boolean;
+  lastFiredAt: string | null;
+}
+
 export interface Medication {
   id: string;
   name: string;

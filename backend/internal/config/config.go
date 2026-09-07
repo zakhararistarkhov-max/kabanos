@@ -33,6 +33,7 @@ type Config struct {
 
 	Telegram Telegram
 	S3       S3
+	VAPID    VAPID
 }
 
 // S3 configures object storage (MinIO in dev, any S3-compatible store in prod)
@@ -118,6 +119,16 @@ type Telegram struct {
 	BotToken string
 }
 
+// VAPID configures Web Push (browser/PWA notifications). When the keys are
+// empty, push is disabled and the API advertises it as unavailable.
+type VAPID struct {
+	PublicKey  string
+	PrivateKey string
+	Subject    string // "mailto:you@example.com" — contact for push services
+}
+
+func (v VAPID) Enabled() bool { return v.PublicKey != "" && v.PrivateKey != "" }
+
 // Load reads configuration from the environment, applies sensible development
 // defaults, and validates required fields. It returns an error rather than
 // panicking so the caller controls process exit.
@@ -156,6 +167,11 @@ func Load() (*Config, error) {
 		},
 		Telegram: Telegram{
 			BotToken: env("TELEGRAM_BOT_TOKEN", ""),
+		},
+		VAPID: VAPID{
+			PublicKey:  env("VAPID_PUBLIC_KEY", ""),
+			PrivateKey: env("VAPID_PRIVATE_KEY", ""),
+			Subject:    env("VAPID_SUBJECT", "mailto:admin@kabanos.local"),
 		},
 		S3: S3{
 			Endpoint:       env("S3_ENDPOINT", "localhost:9000"),

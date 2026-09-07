@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  AlarmClock,
   BookText,
   ClipboardList,
   Droplet,
@@ -36,6 +37,7 @@ const NAV: { href: string; label: string; Icon: LucideIcon }[] = [
   { href: "/weight", label: "Вес", Icon: Scale },
   { href: "/pressure", label: "Давление", Icon: HeartPulse },
   { href: "/diary", label: "Дневник", Icon: BookText },
+  { href: "/reminders", label: "Напоминания", Icon: AlarmClock },
   { href: "/settings", label: "Настройки", Icon: Settings },
 ];
 
@@ -88,7 +90,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   }`}
                 >
                   <Icon size={17} strokeWidth={2} className="shrink-0" />
-                  <span className="hidden xl:inline">{label}</span>
+                  <span className="hidden 2xl:inline">{label}</span>
                 </Link>
               );
             })}
