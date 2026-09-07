@@ -52,6 +52,9 @@ func (s *Service) UpdateExercise(ctx context.Context, e *Exercise, owner uuid.UU
 func (s *Service) DeleteExercise(ctx context.Context, id, owner uuid.UUID) error {
 	return s.ex.Delete(ctx, id, owner)
 }
+func (s *Service) PublishExercise(ctx context.Context, id, owner uuid.UUID, public bool) error {
+	return s.ex.SetPublic(ctx, id, owner, public)
+}
 func (s *Service) GetExercise(ctx context.Context, id, viewer uuid.UUID) (*Exercise, error) {
 	return s.ex.GetByID(ctx, id, viewer)
 }
@@ -118,6 +121,9 @@ func (s *Service) validateItems(ctx context.Context, items []ItemInput) error {
 
 func (s *Service) DeleteWorkout(ctx context.Context, id, owner uuid.UUID) error {
 	return s.wo.Delete(ctx, id, owner)
+}
+func (s *Service) PublishWorkout(ctx context.Context, id, owner uuid.UUID, public bool) error {
+	return s.wo.SetPublic(ctx, id, owner, public)
 }
 func (s *Service) GetWorkout(ctx context.Context, id, viewer uuid.UUID) (*Workout, error) {
 	return s.wo.GetByID(ctx, id, viewer)

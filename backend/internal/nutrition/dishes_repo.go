@@ -21,7 +21,7 @@ func NewDishRepo(db *postgres.DB) *DishRepo { return &DishRepo{db: db} }
 const dishColumns = `
 	d.id, d.created_by, d.name, d.description, d.recipe, d.image_key,
 	d.kcal_per_100g::float8, d.protein_per_100g::float8, d.fat_per_100g::float8, d.carbs_per_100g::float8,
-	d.serving_grams::float8, d.rating_count, d.rating_sum, d.created_at, d.updated_at,
+	d.serving_grams::float8, d.is_public, d.rating_count, d.rating_sum, d.created_at, d.updated_at,
 	u.display_name,
 	EXISTS(SELECT 1 FROM dish_favorites f WHERE f.dish_id = d.id AND f.user_id = $1) AS is_favorite,
 	(SELECT r.rating FROM dish_ratings r WHERE r.dish_id = d.id AND r.user_id = $1) AS my_rating`
@@ -31,7 +31,7 @@ func scanDish(row pgx.Row) (*Dish, error) {
 	err := row.Scan(
 		&d.ID, &d.CreatedBy, &d.Name, &d.Description, &d.Recipe, &d.ImageKey,
 		&d.KcalPer100, &d.ProteinPer100, &d.FatPer100, &d.CarbsPer100,
-		&d.ServingGrams, &d.RatingCount, &d.RatingSum, &d.CreatedAt, &d.UpdatedAt,
+		&d.ServingGrams, &d.IsPublic, &d.RatingCount, &d.RatingSum, &d.CreatedAt, &d.UpdatedAt,
 		&d.AuthorName, &d.IsFavorite, &d.MyRating,
 	)
 	if err != nil {
@@ -222,6 +222,18 @@ func (r *DishRepo) Delete(ctx context.Context, id, ownerID uuid.UUID) error {
 	return nil
 }
 
+// SetPublic publishes/unpublishes a dish owned by ownerID.
+func (r *DishRepo) SetPublic(ctx context.Context, id, ownerID uuid.UUID, public bool) error {
+	ct, err := r.db.Pool.Exec(ctx, `UPDATE dishes SET is_public=$3, updated_at=now() WHERE id=$1 AND created_by=$2`, id, ownerID, public)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return postgres.ErrNotFound
+	}
+	return nil
+}
+
 // ListParams controls the dish listing.
 type ListParams struct {
 	ViewerID uuid.UUID
@@ -247,6 +259,8 @@ func (r *DishRepo) List(ctx context.Context, p ListParams) ([]Dish, int, error) 
 		case "favorites":
 			*args = append(*args, p.ViewerID)
 			conds = append(conds, fmt.Sprintf("EXISTS(SELECT 1 FROM dish_favorites ff WHERE ff.dish_id = d.id AND ff.user_id = $%d)", len(*args)))
+		default: // "all": only published dishes are visible in the shared catalog
+			conds = append(conds, "d.is_public")
 		}
 		if q := strings.TrimSpace(p.Query); q != "" {
 			*args = append(*args, "%"+q+"%")

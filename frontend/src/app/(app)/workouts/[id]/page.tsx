@@ -8,11 +8,13 @@ import {
   useAddWorkoutComment,
   useDeleteWorkout,
   useDeleteWorkoutComment,
+  usePublishWorkout,
   useRateWorkout,
   useToggleWorkoutFavorite,
   useWorkout,
   useWorkoutComments,
 } from "@/hooks/useTraining";
+import { PublishBadge, PublishControl } from "@/components/PublishControl";
 import { CATEGORY_LABELS, DIFFICULTY_LABELS, DIFFICULTY_STYLE, label, prescription } from "@/lib/training";
 
 export default function WorkoutDetailPage() {
@@ -26,6 +28,7 @@ export default function WorkoutDetailPage() {
   const addComment = useAddWorkoutComment(id);
   const deleteComment = useDeleteWorkoutComment(id);
   const remove = useDeleteWorkout();
+  const publish = usePublishWorkout(id);
 
   const [commentBody, setCommentBody] = useState("");
 
@@ -71,6 +74,11 @@ export default function WorkoutDetailPage() {
             <div>
               <h1 className="text-2xl font-bold">{w.name}</h1>
               <p className="mt-1 text-sm text-ink-500">автор: {w.authorName || "аноним"}</p>
+              {w.isMine ? (
+                <div className="mt-2">
+                  <PublishBadge isPublic={w.isPublic} />
+                </div>
+              ) : null}
             </div>
             <button onClick={() => favorite.mutate({ id: w.id, favorite: !w.isFavorite })} className="text-2xl">
               <span className={w.isFavorite ? "text-bad" : "text-ink-400"}>{w.isFavorite ? "♥" : "♡"}</span>
@@ -90,7 +98,8 @@ export default function WorkoutDetailPage() {
           </div>
           {w.description ? <p className="mt-3 whitespace-pre-wrap text-ink-300">{w.description}</p> : null}
           {w.isMine ? (
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
+              <PublishControl isPublic={w.isPublic} pending={publish.isPending} onToggle={(p) => publish.mutate(p)} />
               <Link href={`/workouts/${w.id}/edit`} className="btn-ghost">
                 Редактировать
               </Link>

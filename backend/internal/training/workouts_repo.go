@@ -25,7 +25,7 @@ func NewWorkoutRepo(db *postgres.DB) *WorkoutRepo {
 
 // woColumns selects a workout plus viewer-specific flags. $1 = viewer id.
 const woColumns = `
-	w.id, w.created_by, w.name, w.description, w.difficulty, w.image_key,
+	w.id, w.created_by, w.name, w.description, w.difficulty, w.image_key, w.is_public,
 	w.rating_count, w.rating_sum, w.created_at, w.updated_at,
 	u.display_name,
 	EXISTS(SELECT 1 FROM workout_favorites f WHERE f.workout_id = w.id AND f.user_id = $1) AS is_favorite,
@@ -34,7 +34,7 @@ const woColumns = `
 func scanWorkout(row pgx.Row) (*Workout, error) {
 	var w Workout
 	err := row.Scan(
-		&w.ID, &w.CreatedBy, &w.Name, &w.Description, &w.Difficulty, &w.ImageKey,
+		&w.ID, &w.CreatedBy, &w.Name, &w.Description, &w.Difficulty, &w.ImageKey, &w.IsPublic,
 		&w.RatingCount, &w.RatingSum, &w.CreatedAt, &w.UpdatedAt,
 		&w.AuthorName, &w.IsFavorite, &w.MyRating,
 	)
@@ -116,6 +116,17 @@ func (r *WorkoutRepo) Delete(ctx context.Context, id, ownerID uuid.UUID) error {
 	return nil
 }
 
+func (r *WorkoutRepo) SetPublic(ctx context.Context, id, ownerID uuid.UUID, public bool) error {
+	ct, err := r.db.Pool.Exec(ctx, `UPDATE workouts SET is_public=$3, updated_at=now() WHERE id=$1 AND created_by=$2`, id, ownerID, public)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return postgres.ErrNotFound
+	}
+	return nil
+}
+
 // GetByID returns a workout with its ordered item list hydrated.
 func (r *WorkoutRepo) GetByID(ctx context.Context, id, viewerID uuid.UUID) (*Workout, error) {
 	q := `SELECT ` + woColumns + ` FROM workouts w JOIN users u ON u.id = w.created_by WHERE w.id = $2`
@@ -172,6 +183,8 @@ func (r *WorkoutRepo) List(ctx context.Context, p ListParams) ([]Workout, int, e
 		case "favorites":
 			*args = append(*args, p.ViewerID)
 			conds = append(conds, fmt.Sprintf("EXISTS(SELECT 1 FROM workout_favorites ff WHERE ff.workout_id = w.id AND ff.user_id = $%d)", len(*args)))
+		default: // "all": only published workouts in the shared catalog
+			conds = append(conds, "w.is_public")
 		}
 		if q := strings.TrimSpace(p.Query); q != "" {
 			*args = append(*args, "%"+q+"%")

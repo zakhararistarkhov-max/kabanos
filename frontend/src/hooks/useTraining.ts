@@ -122,6 +122,18 @@ export function useToggleExerciseFavorite() {
   });
 }
 
+export function usePublishExercise(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (publish: boolean) =>
+      api(`/training/exercises/${id}/publish`, { method: publish ? "PUT" : "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["exercise", id] });
+      qc.invalidateQueries({ queryKey: ["exercises"] });
+    },
+  });
+}
+
 export function useExerciseComments(id: string) {
   return useQuery<{ items: CatalogComment[] }>({
     queryKey: ["exercise", id, "comments"],
@@ -243,6 +255,18 @@ export function useToggleWorkoutFavorite() {
       api(`/training/workouts/${id}/favorite`, { method: favorite ? "PUT" : "DELETE" }),
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: ["workout", v.id] });
+      qc.invalidateQueries({ queryKey: ["workouts"] });
+    },
+  });
+}
+
+export function usePublishWorkout(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (publish: boolean) =>
+      api(`/training/workouts/${id}/publish`, { method: publish ? "PUT" : "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["workout", id] });
       qc.invalidateQueries({ queryKey: ["workouts"] });
     },
   });

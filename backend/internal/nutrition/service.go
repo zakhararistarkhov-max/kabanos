@@ -82,6 +82,9 @@ func (s *Service) UpdateDish(ctx context.Context, d *Dish, ingredients []Ingredi
 func (s *Service) DeleteDish(ctx context.Context, id, owner uuid.UUID) error {
 	return s.dishes.Delete(ctx, id, owner)
 }
+func (s *Service) PublishDish(ctx context.Context, id, owner uuid.UUID, public bool) error {
+	return s.dishes.SetPublic(ctx, id, owner, public)
+}
 func (s *Service) GetDish(ctx context.Context, id, viewer uuid.UUID) (*Dish, error) {
 	return s.dishes.GetByID(ctx, id, viewer)
 }

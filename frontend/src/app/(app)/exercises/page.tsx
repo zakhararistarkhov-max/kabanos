@@ -171,7 +171,13 @@ function ExerciseCard({ ex, onToggleFav }: { ex: Exercise; onToggleFav: () => vo
         <div className="p-4">
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-semibold leading-tight">{ex.name}</h3>
-            {ex.isMine ? <span className="rounded-full bg-brand/15 px-2 py-0.5 text-xs text-brand">моё</span> : null}
+            {ex.isMine ? (
+              ex.isPublic ? (
+                <span className="shrink-0 rounded-full bg-brand/15 px-2 py-0.5 text-xs text-brand">моё</span>
+              ) : (
+                <span className="shrink-0 rounded-full bg-warn/15 px-2 py-0.5 text-xs text-warn">черновик</span>
+              )
+            ) : null}
           </div>
           <div className="mt-2 flex flex-wrap gap-1.5">
             <span className="rounded-md bg-ink-800 px-2 py-0.5 text-xs text-ink-300">{label(CATEGORY_LABELS, ex.category)}</span>

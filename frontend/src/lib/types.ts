@@ -148,6 +148,7 @@ export interface Dish {
   myRating: number | null;
   isFavorite: boolean;
   isMine: boolean;
+  isPublic: boolean;
   authorName: string;
   createdAt: string;
   ingredients: DishIngredient[];
@@ -201,6 +202,7 @@ export interface Exercise {
   myRating: number | null;
   isFavorite: boolean;
   isMine: boolean;
+  isPublic: boolean;
   authorName: string;
   createdAt: string;
 }
@@ -242,6 +244,7 @@ export interface Workout {
   myRating: number | null;
   isFavorite: boolean;
   isMine: boolean;
+  isPublic: boolean;
   authorName: string;
   createdAt: string;
   items?: WorkoutItem[];
@@ -283,6 +286,29 @@ export interface PressureSummary {
   category: PressureCategory;
   averages: PressureAverages;
   series: PressureEntry[];
+  count: number;
+}
+
+// --- diary ---
+
+export interface DiaryAttachment {
+  key: string;
+  kind: "image" | "video";
+  contentType: string;
+  url: string | null;
+}
+
+export interface DiaryEntry {
+  id: string;
+  date: string;
+  body: string;
+  attachments: DiaryAttachment[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DiaryDateCount {
+  date: string;
   count: number;
 }
 

@@ -25,7 +25,7 @@ func NewExerciseRepo(db *postgres.DB) *ExerciseRepo {
 // exColumns selects an exercise plus viewer-specific flags. $1 = viewer id.
 const exColumns = `
 	e.id, e.created_by, e.name, e.description, e.category, e.difficulty, e.joint_impact,
-	e.equipment, e.muscles, e.image_key, e.video_url,
+	e.equipment, e.muscles, e.image_key, e.video_url, e.is_public,
 	e.rating_count, e.rating_sum, e.created_at, e.updated_at,
 	u.display_name,
 	EXISTS(SELECT 1 FROM exercise_favorites f WHERE f.exercise_id = e.id AND f.user_id = $1) AS is_favorite,
@@ -35,7 +35,7 @@ func scanExercise(row pgx.Row) (*Exercise, error) {
 	var e Exercise
 	err := row.Scan(
 		&e.ID, &e.CreatedBy, &e.Name, &e.Description, &e.Category, &e.Difficulty, &e.JointImpact,
-		&e.Equipment, &e.Muscles, &e.ImageKey, &e.VideoURL,
+		&e.Equipment, &e.Muscles, &e.ImageKey, &e.VideoURL, &e.IsPublic,
 		&e.RatingCount, &e.RatingSum, &e.CreatedAt, &e.UpdatedAt,
 		&e.AuthorName, &e.IsFavorite, &e.MyRating,
 	)
@@ -99,6 +99,17 @@ func (r *ExerciseRepo) Delete(ctx context.Context, id, ownerID uuid.UUID) error 
 	return nil
 }
 
+func (r *ExerciseRepo) SetPublic(ctx context.Context, id, ownerID uuid.UUID, public bool) error {
+	ct, err := r.db.Pool.Exec(ctx, `UPDATE exercises SET is_public=$3, updated_at=now() WHERE id=$1 AND created_by=$2`, id, ownerID, public)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return postgres.ErrNotFound
+	}
+	return nil
+}
+
 func (r *ExerciseRepo) List(ctx context.Context, p ListParams) ([]Exercise, int, error) {
 	// buildWhere appends filter args to the given slice (numbering from its
 	// current length) and returns the WHERE clause, so the count and list
@@ -112,6 +123,8 @@ func (r *ExerciseRepo) List(ctx context.Context, p ListParams) ([]Exercise, int,
 		case "favorites":
 			*args = append(*args, p.ViewerID)
 			conds = append(conds, fmt.Sprintf("EXISTS(SELECT 1 FROM exercise_favorites ff WHERE ff.exercise_id = e.id AND ff.user_id = $%d)", len(*args)))
+		default: // "all": only published exercises in the shared catalog
+			conds = append(conds, "e.is_public")
 		}
 		if q := strings.TrimSpace(p.Query); q != "" {
 			*args = append(*args, "%"+q+"%")

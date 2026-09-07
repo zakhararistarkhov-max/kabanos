@@ -68,6 +68,18 @@ export function useDeleteDish() {
   });
 }
 
+export function usePublishDish(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (publish: boolean) =>
+      api(`/nutrition/dishes/${id}/publish`, { method: publish ? "PUT" : "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dish", id] });
+      qc.invalidateQueries({ queryKey: ["dishes"] });
+    },
+  });
+}
+
 export function useRateDish(id: string) {
   const qc = useQueryClient();
   return useMutation({

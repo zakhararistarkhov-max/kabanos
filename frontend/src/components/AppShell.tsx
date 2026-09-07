@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  BookText,
   ClipboardList,
   Droplet,
   Dumbbell,
@@ -34,6 +35,7 @@ const NAV: { href: string; label: string; Icon: LucideIcon }[] = [
   { href: "/meds", label: "Таблетки", Icon: Pill },
   { href: "/weight", label: "Вес", Icon: Scale },
   { href: "/pressure", label: "Давление", Icon: HeartPulse },
+  { href: "/diary", label: "Дневник", Icon: BookText },
   { href: "/settings", label: "Настройки", Icon: Settings },
 ];
 

@@ -30,6 +30,7 @@ type Dish struct {
 	FatPer100      float64
 	CarbsPer100    float64
 	ServingGrams   *float64
+	IsPublic       bool
 	RatingCount    int
 	RatingSum      int
 	CreatedAt      time.Time

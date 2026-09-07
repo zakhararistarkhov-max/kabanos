@@ -24,6 +24,7 @@ type Exercise struct {
 	Muscles     []string
 	ImageKey    *string
 	VideoURL    string
+	IsPublic    bool
 	RatingCount int
 	RatingSum   int
 	CreatedAt   time.Time
@@ -49,6 +50,7 @@ type Workout struct {
 	Description string
 	Difficulty  string
 	ImageKey    *string
+	IsPublic    bool
 	RatingCount int
 	RatingSum   int
 	CreatedAt   time.Time

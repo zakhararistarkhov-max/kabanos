@@ -12,9 +12,11 @@ import {
   useDeleteDish,
   useDish,
   useDishComments,
+  usePublishDish,
   useRateDish,
   useToggleFavorite,
 } from "@/hooks/useDishes";
+import { PublishBadge, PublishControl } from "@/components/PublishControl";
 import type { Meal } from "@/lib/types";
 
 const MEALS: { value: Meal; label: string }[] = [
@@ -42,6 +44,7 @@ export default function DishDetailPage() {
   const addComment = useAddComment(id);
   const deleteComment = useDeleteComment(id);
   const deleteDish = useDeleteDish();
+  const publish = usePublishDish(id);
 
   const [unit, setUnit] = useState<"g" | "serving">("g");
   const [amount, setAmount] = useState("100");
@@ -122,6 +125,11 @@ export default function DishDetailPage() {
                 </button>
               </div>
               <p className="mt-1 text-sm text-ink-500">автор: {d.authorName || "аноним"}</p>
+              {d.isMine ? (
+                <div className="mt-2">
+                  <PublishBadge isPublic={d.isPublic} />
+                </div>
+              ) : null}
               {d.description ? <p className="mt-3 text-ink-300">{d.description}</p> : null}
 
               <div className="mt-4 grid grid-cols-4 gap-2 text-center">
@@ -133,9 +141,10 @@ export default function DishDetailPage() {
               <p className="mt-1 text-center text-xs text-ink-500">на 100 г{d.servingGrams ? ` · порция ${d.servingGrams} г` : ""}</p>
 
               {d.isMine ? (
-                <div className="mt-4 flex gap-2">
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <PublishControl isPublic={d.isPublic} pending={publish.isPending} onToggle={(p) => publish.mutate(p)} />
                   <button onClick={onDelete} className="btn-ghost text-bad">
-                    Удалить блюдо
+                    Удалить
                   </button>
                 </div>
               ) : null}

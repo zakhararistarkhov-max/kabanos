@@ -160,7 +160,13 @@ function WorkoutCard({ wk, onToggleFav }: { wk: Workout; onToggleFav: () => void
         <div className="p-4">
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-semibold leading-tight">{wk.name}</h3>
-            {wk.isMine ? <span className="rounded-full bg-brand/15 px-2 py-0.5 text-xs text-brand">моё</span> : null}
+            {wk.isMine ? (
+              wk.isPublic ? (
+                <span className="shrink-0 rounded-full bg-brand/15 px-2 py-0.5 text-xs text-brand">моё</span>
+              ) : (
+                <span className="shrink-0 rounded-full bg-warn/15 px-2 py-0.5 text-xs text-warn">черновик</span>
+              )
+            ) : null}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <span className={`rounded-md px-2 py-0.5 text-xs ${DIFFICULTY_STYLE[wk.difficulty] ?? "bg-ink-800 text-ink-300"}`}>

@@ -142,7 +142,13 @@ function DishCard({ dish, onToggleFav }: { dish: Dish; onToggleFav: () => void }
         <div className="p-4">
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-semibold leading-tight">{dish.name}</h3>
-            {dish.isMine ? <span className="rounded-full bg-brand/15 px-2 py-0.5 text-xs text-brand">моё</span> : null}
+            {dish.isMine ? (
+              dish.isPublic ? (
+                <span className="shrink-0 rounded-full bg-brand/15 px-2 py-0.5 text-xs text-brand">моё</span>
+              ) : (
+                <span className="shrink-0 rounded-full bg-warn/15 px-2 py-0.5 text-xs text-warn">черновик</span>
+              )
+            ) : null}
           </div>
           <div className="mt-1 text-sm text-ink-500">
             {Math.round(dish.per100g.kcal)} ккал / 100 г · Б {dish.per100g.protein} Ж {dish.per100g.fat} У {dish.per100g.carbs}

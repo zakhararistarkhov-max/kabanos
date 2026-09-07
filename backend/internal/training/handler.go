@@ -35,6 +35,8 @@ func (h *Handler) Routes() http.Handler {
 			r.Delete("/", h.deleteExercise)
 			r.Put("/rating", h.rateExercise)
 			r.Delete("/rating", h.unrateExercise)
+			r.Put("/publish", h.publishExercise)
+			r.Delete("/publish", h.unpublishExercise)
 			r.Put("/favorite", h.favoriteExercise)
 			r.Delete("/favorite", h.unfavoriteExercise)
 			r.Get("/comments", h.listExerciseComments)
@@ -53,6 +55,8 @@ func (h *Handler) Routes() http.Handler {
 			r.Delete("/", h.deleteWorkout)
 			r.Put("/rating", h.rateWorkout)
 			r.Delete("/rating", h.unrateWorkout)
+			r.Put("/publish", h.publishWorkout)
+			r.Delete("/publish", h.unpublishWorkout)
 			r.Put("/favorite", h.favoriteWorkout)
 			r.Delete("/favorite", h.unfavoriteWorkout)
 			r.Get("/comments", h.listWorkoutComments)
@@ -93,6 +97,7 @@ type exerciseDTO struct {
 	MyRating    *int      `json:"myRating"`
 	IsFavorite  bool      `json:"isFavorite"`
 	IsMine      bool      `json:"isMine"`
+	IsPublic    bool      `json:"isPublic"`
 	AuthorName  string    `json:"authorName"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
@@ -104,7 +109,8 @@ func (h *Handler) toExerciseDTO(r *http.Request, e *Exercise, viewer uuid.UUID) 
 		Equipment: nonNil(e.Equipment), Muscles: nonNil(e.Muscles),
 		ImageURL: h.svc.ImageURL(r.Context(), e.ImageKey), VideoURL: e.VideoURL,
 		RatingAvg: round1(e.AvgRating()), RatingCount: e.RatingCount, MyRating: e.MyRating,
-		IsFavorite: e.IsFavorite, IsMine: e.CreatedBy == viewer, AuthorName: e.AuthorName, CreatedAt: e.CreatedAt,
+		IsFavorite: e.IsFavorite, IsMine: e.CreatedBy == viewer, IsPublic: e.IsPublic,
+		AuthorName: e.AuthorName, CreatedAt: e.CreatedAt,
 	}
 }
 
@@ -145,6 +151,7 @@ type workoutDTO struct {
 	MyRating      *int             `json:"myRating"`
 	IsFavorite    bool             `json:"isFavorite"`
 	IsMine        bool             `json:"isMine"`
+	IsPublic      bool             `json:"isPublic"`
 	AuthorName    string           `json:"authorName"`
 	CreatedAt     time.Time        `json:"createdAt"`
 	Items         []workoutItemDTO `json:"items,omitempty"`
@@ -155,7 +162,8 @@ func (h *Handler) toWorkoutCardDTO(r *http.Request, w *Workout, viewer uuid.UUID
 		ID: w.ID.String(), Name: w.Name, Description: w.Description, Difficulty: w.Difficulty,
 		ImageURL: h.svc.ImageURL(r.Context(), w.ImageKey), ExerciseCount: count,
 		RatingAvg: round1(w.AvgRating()), RatingCount: w.RatingCount, MyRating: w.MyRating,
-		IsFavorite: w.IsFavorite, IsMine: w.CreatedBy == viewer, AuthorName: w.AuthorName, CreatedAt: w.CreatedAt,
+		IsFavorite: w.IsFavorite, IsMine: w.CreatedBy == viewer, IsPublic: w.IsPublic,
+		AuthorName: w.AuthorName, CreatedAt: w.CreatedAt,
 	}
 }
 
@@ -322,6 +330,21 @@ func (h *Handler) deleteExercise(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusNoContent, nil)
+}
+
+func (h *Handler) publishExercise(w http.ResponseWriter, r *http.Request)   { h.setExercisePublic(w, r, true) }
+func (h *Handler) unpublishExercise(w http.ResponseWriter, r *http.Request) { h.setExercisePublic(w, r, false) }
+
+func (h *Handler) setExercisePublic(w http.ResponseWriter, r *http.Request, public bool) {
+	id, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+	if err := h.svc.PublishExercise(r.Context(), id, auth.UserID(r.Context()), public); err != nil {
+		renderErr(w, r, err, "exercise not found or not yours")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"isPublic": public})
 }
 
 func (h *Handler) rateExercise(w http.ResponseWriter, r *http.Request) {
@@ -574,6 +597,21 @@ func (h *Handler) deleteWorkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusNoContent, nil)
+}
+
+func (h *Handler) publishWorkout(w http.ResponseWriter, r *http.Request)   { h.setWorkoutPublic(w, r, true) }
+func (h *Handler) unpublishWorkout(w http.ResponseWriter, r *http.Request) { h.setWorkoutPublic(w, r, false) }
+
+func (h *Handler) setWorkoutPublic(w http.ResponseWriter, r *http.Request, public bool) {
+	id, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+	if err := h.svc.PublishWorkout(r.Context(), id, auth.UserID(r.Context()), public); err != nil {
+		renderErr(w, r, err, "workout not found or not yours")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"isPublic": public})
 }
 
 func (h *Handler) rateWorkout(w http.ResponseWriter, r *http.Request) {

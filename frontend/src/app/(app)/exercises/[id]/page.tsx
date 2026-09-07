@@ -10,9 +10,11 @@ import {
   useDeleteExerciseComment,
   useExercise,
   useExerciseComments,
+  usePublishExercise,
   useRateExercise,
   useToggleExerciseFavorite,
 } from "@/hooks/useTraining";
+import { PublishBadge, PublishControl } from "@/components/PublishControl";
 import {
   CATEGORY_LABELS,
   DIFFICULTY_LABELS,
@@ -34,6 +36,7 @@ export default function ExerciseDetailPage() {
   const addComment = useAddExerciseComment(id);
   const deleteComment = useDeleteExerciseComment(id);
   const remove = useDeleteExercise();
+  const publish = usePublishExercise(id);
 
   const [commentBody, setCommentBody] = useState("");
 
@@ -84,6 +87,11 @@ export default function ExerciseDetailPage() {
                 </button>
               </div>
               <p className="mt-1 text-sm text-ink-500">автор: {e.authorName || "аноним"}</p>
+              {e.isMine ? (
+                <div className="mt-2">
+                  <PublishBadge isPublic={e.isPublic} />
+                </div>
+              ) : null}
 
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="rounded-md bg-ink-800 px-2 py-1 text-xs text-ink-300">{label(CATEGORY_LABELS, e.category)}</span>
@@ -111,7 +119,8 @@ export default function ExerciseDetailPage() {
               ) : null}
 
               {e.isMine ? (
-                <div className="mt-4 flex gap-2">
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <PublishControl isPublic={e.isPublic} pending={publish.isPending} onToggle={(p) => publish.mutate(p)} />
                   <Link href={`/exercises/${e.id}/edit`} className="btn-ghost">
                     Редактировать
                   </Link>

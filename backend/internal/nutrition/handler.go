@@ -44,6 +44,8 @@ func (h *Handler) Routes() http.Handler {
 			r.Delete("/", h.deleteDish)
 			r.Put("/rating", h.rateDish)
 			r.Delete("/rating", h.unrateDish)
+			r.Put("/publish", h.publishDish)
+			r.Delete("/publish", h.unpublishDish)
 			r.Put("/favorite", h.favorite)
 			r.Delete("/favorite", h.unfavorite)
 			r.Get("/comments", h.listComments)
@@ -87,6 +89,7 @@ type dishDTO struct {
 	IsMine       bool            `json:"isMine"`
 	AuthorName   string          `json:"authorName"`
 	CreatedAt    time.Time       `json:"createdAt"`
+	IsPublic     bool            `json:"isPublic"`
 	Ingredients  []ingredientDTO `json:"ingredients"`
 }
 
@@ -115,6 +118,7 @@ func (h *Handler) toDishDTO(r *http.Request, d *Dish, viewer uuid.UUID) dishDTO 
 		IsMine:       d.CreatedBy == viewer,
 		AuthorName:   d.AuthorName,
 		CreatedAt:    d.CreatedAt,
+		IsPublic:     d.IsPublic,
 		Ingredients:  ings,
 	}
 }
@@ -457,6 +461,21 @@ func (h *Handler) deleteDish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusNoContent, nil)
+}
+
+func (h *Handler) publishDish(w http.ResponseWriter, r *http.Request)   { h.setDishPublic(w, r, true) }
+func (h *Handler) unpublishDish(w http.ResponseWriter, r *http.Request) { h.setDishPublic(w, r, false) }
+
+func (h *Handler) setDishPublic(w http.ResponseWriter, r *http.Request, public bool) {
+	id, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+	if err := h.svc.PublishDish(r.Context(), id, auth.UserID(r.Context()), public); err != nil {
+		h.renderErr(w, r, err, "dish not found or not yours")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"isPublic": public})
 }
 
 type ratingRequest struct {
