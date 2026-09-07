@@ -129,6 +129,19 @@ type VAPID struct {
 
 func (v VAPID) Enabled() bool { return v.PublicKey != "" && v.PrivateKey != "" }
 
+// WebPushSubscriber returns the VAPID "sub" claim in the form the webpush-go
+// library expects. That library prepends "mailto:" to anything that is not an
+// https URL, so we hand it a bare address (or an https URL). Passing a value
+// that already starts with "mailto:" would otherwise produce a doubled
+// "mailto:mailto:..." subject, which Apple rejects as BadJwtToken.
+func (v VAPID) WebPushSubscriber() string {
+	s := strings.TrimSpace(v.Subject)
+	if strings.HasPrefix(strings.ToLower(s), "mailto:") {
+		return strings.TrimSpace(s[len("mailto:"):])
+	}
+	return s
+}
+
 // Load reads configuration from the environment, applies sensible development
 // defaults, and validates required fields. It returns an error rather than
 // panicking so the caller controls process exit.

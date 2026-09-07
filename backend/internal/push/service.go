@@ -54,7 +54,7 @@ func (s *Service) Send(ctx context.Context, userID uuid.UUID, n Notification) (i
 			Endpoint: sub.Endpoint,
 			Keys:     webpush.Keys{P256dh: sub.P256dh, Auth: sub.Auth},
 		}, &webpush.Options{
-			Subscriber:      s.cfg.Subject,
+			Subscriber:      s.cfg.WebPushSubscriber(),
 			VAPIDPublicKey:  s.cfg.PublicKey,
 			VAPIDPrivateKey: s.cfg.PrivateKey,
 			TTL:             60,
