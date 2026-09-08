@@ -40,7 +40,10 @@ func New(ctx context.Context, cfg config.S3) (*Storage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("minio admin client: %w", err)
 	}
-	public, err := minio.New(cfg.PublicEndpoint, &minio.Options{Creds: creds, Secure: cfg.UseSSL, Region: cfg.Region})
+	// The public client only signs URLs, so its Secure flag sets the scheme of
+	// presigned URLs handed to the browser — independent of how the backend
+	// reaches the store internally.
+	public, err := minio.New(cfg.PublicEndpoint, &minio.Options{Creds: creds, Secure: cfg.PublicUseSSL, Region: cfg.Region})
 	if err != nil {
 		return nil, fmt.Errorf("minio public client: %w", err)
 	}

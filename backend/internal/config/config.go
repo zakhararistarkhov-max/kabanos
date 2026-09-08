@@ -46,9 +46,15 @@ type S3 struct {
 	AccessKey      string
 	SecretKey      string
 	Bucket         string
-	UseSSL         bool
-	Region         string
-	Enabled        bool
+	// UseSSL controls TLS to the internal Endpoint (backend → store).
+	UseSSL bool
+	// PublicUseSSL controls the scheme of presigned URLs (browser → store). It
+	// is separate so a store reached internally over plain HTTP can still be
+	// fronted by an HTTPS reverse proxy for browsers (required when the app is
+	// served over HTTPS, or browsers block the upload as mixed content).
+	PublicUseSSL bool
+	Region       string
+	Enabled      bool
 }
 
 // Postgres holds the connection settings for the primary database. Read
@@ -146,6 +152,7 @@ func (v VAPID) WebPushSubscriber() string {
 // defaults, and validates required fields. It returns an error rather than
 // panicking so the caller controls process exit.
 func Load() (*Config, error) {
+	useSSL := envBool("S3_USE_SSL", false)
 	c := &Config{
 		Env:             env("APP_ENV", "development"),
 		HTTPAddr:        env("HTTP_ADDR", ":8080"),
@@ -192,9 +199,12 @@ func Load() (*Config, error) {
 			AccessKey:      env("S3_ACCESS_KEY", "kabanos"),
 			SecretKey:      env("S3_SECRET_KEY", "kabanos-secret"),
 			Bucket:         env("S3_BUCKET", "kabanos"),
-			UseSSL:         envBool("S3_USE_SSL", false),
-			Region:         env("S3_REGION", "us-east-1"),
-			Enabled:        envBool("S3_ENABLED", true),
+			UseSSL:         useSSL,
+			// Defaults to UseSSL so single-host setups keep one flag; override
+			// when the store is fronted by an HTTPS proxy for browsers only.
+			PublicUseSSL: envBool("S3_PUBLIC_USE_SSL", useSSL),
+			Region:       env("S3_REGION", "us-east-1"),
+			Enabled:      envBool("S3_ENABLED", true),
 		},
 		CORSAllowedOrigins: envList("CORS_ALLOWED_ORIGINS"),
 	}

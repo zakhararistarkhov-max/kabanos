@@ -210,7 +210,12 @@ MAIL_FROM_EMAIL=no-reply@example.com
 S3_ACCESS_KEY=kabanos
 S3_SECRET_KEY=<длинный-секрет, напр. openssl rand -hex 24>
 S3_PUBLIC_ENDPOINT=media.example.com
-S3_USE_SSL=true
+# ВАЖНО: два разных флага TLS.
+#  • S3_USE_SSL   — как БЭКЕНД ходит в MinIO внутри Docker (minio:9000, обычный
+#    HTTP) — оставьте false/не задавайте.
+#  • S3_PUBLIC_USE_SSL — схема ссылок для БРАУЗЕРА. При https-приложении = true,
+#    иначе браузер заблокирует загрузку/показ фото как mixed content.
+S3_PUBLIC_USE_SSL=true
 # Не нужны фото сейчас? Поставьте S3_ENABLED=false — MinIO и media-домен не понадобятся.
 ```
 
@@ -321,7 +326,9 @@ git checkout <нужный-коммит> && docker compose up -d --build
   (готовые примеры для Gmail и mail.ru — там же). `SMTP_TLS` можно не указывать:
   режим определится по порту (465 → implicit TLS, 587 → STARTTLS), либо задайте
   `none|starttls|tls` явно.
-- `S3_*` — объектное хранилище (MinIO/S3) для фото блюд и упражнений.
+- `S3_*` — объектное хранилище (MinIO/S3) для фото блюд и упражнений. `S3_USE_SSL`
+  — TLS для внутреннего доступа бэкенда (обычно false), `S3_PUBLIC_USE_SSL` — схема
+  presigned-ссылок для браузера (true при https-приложении, иначе mixed content).
 - `TELEGRAM_BOT_TOKEN` — токен бота (для будущего дайджеста).
 
 ---
