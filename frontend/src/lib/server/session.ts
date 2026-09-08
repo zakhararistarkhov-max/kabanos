@@ -55,6 +55,35 @@ export async function rawBackend(path: string, init: RequestInit = {}): Promise<
 // separate even though the map is process-global.
 const inflightRefresh = new Map<string, Promise<Tokens | null>>();
 
+// Result of a completed rotation, keyed by the OLD refresh token. Because
+// refresh tokens rotate (each use revokes the previous), a request that reaches
+// the refresh step just AFTER the single-flight promise resolved would still be
+// holding the old token in its cookie and, without this, would call /refresh
+// again with a now-revoked token — which the backend flags as reuse/theft and
+// rejects (401). Caching the rotation briefly lets these stragglers reuse the
+// freshly minted tokens instead of re-refreshing. TTL only needs to outlast a
+// single page-load burst.
+const ROTATED_TTL_MS = 30_000;
+const recentlyRotated = new Map<string, { tokens: Tokens; at: number }>();
+
+function rememberRotation(oldRefreshToken: string, tokens: Tokens): void {
+  const now = Date.now();
+  recentlyRotated.set(oldRefreshToken, { tokens, at: now });
+  for (const [k, v] of recentlyRotated) {
+    if (now - v.at > ROTATED_TTL_MS) recentlyRotated.delete(k);
+  }
+}
+
+function recentRotation(oldRefreshToken: string): Tokens | null {
+  const hit = recentlyRotated.get(oldRefreshToken);
+  if (!hit) return null;
+  if (Date.now() - hit.at > ROTATED_TTL_MS) {
+    recentlyRotated.delete(oldRefreshToken);
+    return null;
+  }
+  return hit.tokens;
+}
+
 function sharedRefresh(refreshToken: string): Promise<Tokens | null> {
   const existing = inflightRefresh.get(refreshToken);
   if (existing) return existing;
@@ -65,7 +94,9 @@ function sharedRefresh(refreshToken: string): Promise<Tokens | null> {
       body: JSON.stringify({ refreshToken }),
     });
     if (!res.ok) return null;
-    return (await res.json()) as Tokens;
+    const tokens = (await res.json()) as Tokens;
+    rememberRotation(refreshToken, tokens);
+    return tokens;
   })().finally(() => inflightRefresh.delete(refreshToken));
 
   inflightRefresh.set(refreshToken, p);
@@ -92,8 +123,24 @@ export async function backendFetch(path: string, init: RequestInit = {}): Promis
   const rt = (await cookies()).get(COOKIE_REFRESH)?.value;
   if (!rt) return res;
 
+  // If this refresh token was just rotated by a concurrent request, reuse that
+  // result instead of calling /refresh again with a now-revoked token.
+  const cached = recentRotation(rt);
+  if (cached) {
+    await setSession(cached);
+    return doFetch(cached.accessToken);
+  }
+
   const tokens = await sharedRefresh(rt);
   if (!tokens) {
+    // Lost a rotation race after our single-flight resolved? Retry the cache
+    // once before giving up, so a straggler doesn't needlessly clear a session
+    // that a sibling request just refreshed.
+    const raced = recentRotation(rt);
+    if (raced) {
+      await setSession(raced);
+      return doFetch(raced.accessToken);
+    }
     await clearSession();
     return res;
   }

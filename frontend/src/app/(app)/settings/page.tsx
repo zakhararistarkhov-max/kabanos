@@ -111,6 +111,7 @@ function NotificationsCard() {
   if (!push.loading) {
     if (!push.supported) hint = "Ваш браузер не поддерживает push-уведомления.";
     else if (!push.secure) hint = "Уведомления работают только по HTTPS. Откройте сайт по защищённому адресу (https://…).";
+    else if (push.checkFailed) hint = "Не удалось проверить настройки уведомлений на сервере. Попробуйте обновить.";
     else if (!push.configured) hint = "Push не настроен на сервере (не заданы VAPID-ключи).";
   }
   const canToggle = push.supported && push.secure && push.configured && !push.loading;
@@ -134,7 +135,14 @@ function NotificationsCard() {
       </div>
 
       {hint ? (
-        <p className="rounded-xl bg-ink-800/50 px-3 py-2 text-sm text-ink-400">{hint}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="rounded-xl bg-ink-800/50 px-3 py-2 text-sm text-ink-400">{hint}</p>
+          {push.checkFailed ? (
+            <button onClick={push.refresh} className="btn-ghost">
+              Обновить
+            </button>
+          ) : null}
+        </div>
       ) : (
         <div className="flex flex-wrap items-center gap-3">
           {push.subscribed ? (

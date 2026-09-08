@@ -17,6 +17,7 @@ export interface PushState {
   supported: boolean; // browser has SW + Push API
   secure: boolean; // secure context (HTTPS or localhost)
   configured: boolean; // server has VAPID keys
+  checkFailed: boolean; // couldn't reach the server to check (≠ not configured)
   subscribed: boolean;
   loading: boolean;
   error: string | null;
@@ -27,6 +28,7 @@ export function usePush() {
     supported: false,
     secure: true,
     configured: true,
+    checkFailed: false,
     subscribed: false,
     loading: true,
     error: null,
@@ -50,14 +52,17 @@ export function usePush() {
     } catch {
       /* ignore */
     }
-    let configured = true;
+    // Separate "server says push is off" from "we couldn't ask the server": a
+    // transient error (e.g. an auth blip) must not be reported as missing VAPID.
+    let configured = false;
+    let checkFailed = false;
     try {
       const k = await api<{ enabled: boolean }>("/push/key");
       configured = k.enabled;
     } catch {
-      configured = false;
+      checkFailed = true;
     }
-    setState({ supported: true, secure, configured, subscribed, loading: false, error: null });
+    setState({ supported: true, secure, configured, checkFailed, subscribed, loading: false, error: null });
   }, []);
 
   useEffect(() => {
