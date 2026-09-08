@@ -143,6 +143,9 @@ export default function DishDetailPage() {
               {d.isMine ? (
                 <div className="mt-4 flex flex-wrap gap-2">
                   <PublishControl isPublic={d.isPublic} pending={publish.isPending} onToggle={(p) => publish.mutate(p)} />
+                  <Link href={`/dishes/${d.id}/edit`} className="btn-ghost">
+                    Редактировать
+                  </Link>
                   <button onClick={onDelete} className="btn-ghost text-bad">
                     Удалить
                   </button>

@@ -25,6 +25,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Route("/{id}", func(r chi.Router) {
 		r.Put("/", h.update)
 		r.Delete("/", h.delete)
+		r.Get("/history", h.history)
 		r.Post("/intake", h.take)
 		r.Delete("/intake", h.undo)
 	})
@@ -181,6 +182,48 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusNoContent, nil)
+}
+
+type historyDayDTO struct {
+	Date  string `json:"date"`
+	Count int    `json:"count"`
+}
+
+type historyDTO struct {
+	Name         string          `json:"name"`
+	Unit         string          `json:"unit"`
+	Dose         float64         `json:"dose"`
+	TimesPerDay  int             `json:"timesPerDay"`
+	StartDate    string          `json:"startDate"`
+	DurationDays *int            `json:"durationDays"`
+	Days         []historyDayDTO `json:"days"`
+	TotalTaken   int             `json:"totalTaken"`
+	ActiveDays   int             `json:"activeDays"`
+	FirstDate    string          `json:"firstDate"`
+	LastDate     string          `json:"lastDate"`
+}
+
+func (h *Handler) history(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r)
+	if !ok {
+		return
+	}
+	hist, err := h.svc.History(r.Context(), id, auth.UserID(r.Context()))
+	if err != nil {
+		renderErr(w, r, err, "medication not found or not yours")
+		return
+	}
+	days := make([]historyDayDTO, 0, len(hist.Days))
+	for _, d := range hist.Days {
+		days = append(days, historyDayDTO{Date: d.Date, Count: d.Count})
+	}
+	httpx.JSON(w, http.StatusOK, historyDTO{
+		Name: hist.Medication.Name, Unit: hist.Medication.Unit, Dose: hist.Medication.Dose,
+		TimesPerDay: hist.Medication.TimesPerDay,
+		StartDate:   hist.Medication.StartDate.Format(dateLayout), DurationDays: hist.Medication.DurationDays,
+		Days: days, TotalTaken: hist.TotalTaken, ActiveDays: hist.ActiveDays,
+		FirstDate: hist.FirstDate, LastDate: hist.LastDate,
+	})
 }
 
 func (h *Handler) take(w http.ResponseWriter, r *http.Request) {

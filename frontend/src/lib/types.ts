@@ -352,3 +352,22 @@ export interface Medication {
   active: boolean;
   createdAt: string;
 }
+
+export interface MedHistoryDay {
+  date: string;
+  count: number;
+}
+
+export interface MedHistory {
+  name: string;
+  unit: string;
+  dose: number;
+  timesPerDay: number;
+  startDate: string;
+  durationDays: number | null;
+  days: MedHistoryDay[];
+  totalTaken: number;
+  activeDays: number;
+  firstDate: string;
+  lastDate: string;
+}

@@ -8,6 +8,7 @@ import { ApiRequestError } from "@/lib/api";
 import {
   useCreateMed,
   useDeleteMed,
+  useMedHistory,
   useMeds,
   useTakeIntake,
   useUndoIntake,
@@ -89,6 +90,7 @@ export default function MedsPage() {
                 </button>
                 {m.notes ? <span className="ml-auto italic">{m.notes}</span> : null}
               </div>
+              <MedHistorySection med={m} />
             </div>
           ))}
         </div>
@@ -100,21 +102,24 @@ export default function MedsPage() {
         <div className="space-y-3">
           <h2 className="text-sm font-semibold text-ink-500">Завершённые курсы</h2>
           {finished.map((m) => (
-            <div key={m.id} className="card flex items-center justify-between opacity-70">
-              <div>
-                <div className="font-medium">{m.name}</div>
-                <div className="text-xs text-ink-500">
-                  {m.dose} {m.unit} × {m.timesPerDay}/день · курс {m.courseTotal ?? "—"} дн.
+            <div key={m.id} className="card">
+              <div className="flex items-center justify-between opacity-80">
+                <div>
+                  <div className="font-medium">{m.name}</div>
+                  <div className="text-xs text-ink-500">
+                    {m.dose} {m.unit} × {m.timesPerDay}/день · курс {m.courseTotal ?? "—"} дн.
+                  </div>
+                </div>
+                <div className="flex gap-3 text-xs text-ink-500">
+                  <button onClick={() => setEditing(m)} className="hover:text-ink-100">
+                    Возобновить
+                  </button>
+                  <button onClick={() => onDelete(m.id)} className="hover:text-bad">
+                    Удалить
+                  </button>
                 </div>
               </div>
-              <div className="flex gap-3 text-xs text-ink-500">
-                <button onClick={() => setEditing(m)} className="hover:text-ink-100">
-                  Возобновить
-                </button>
-                <button onClick={() => onDelete(m.id)} className="hover:text-bad">
-                  Удалить
-                </button>
-              </div>
+              <MedHistorySection med={m} />
             </div>
           ))}
         </div>
@@ -218,5 +223,66 @@ function MedForm({ initial, onDone }: { initial: Medication | null; onDone: () =
         </button>
       </div>
     </form>
+  );
+}
+
+// "YYYY-MM-DD" -> "DD.MM.YYYY"
+function fmtDate(iso: string): string {
+  if (iso.length < 10) return iso;
+  return `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
+}
+
+// Collapsible per-course intake log: when and how consistently the course was
+// taken. The history is fetched lazily the first time the panel is opened.
+function MedHistorySection({ med }: { med: Medication }) {
+  const [open, setOpen] = useState(false);
+  const hist = useMedHistory(med.id, open);
+  const h = hist.data;
+
+  const adherence =
+    h && med.courseTotal && med.timesPerDay > 0
+      ? Math.round((h.totalTaken / (med.timesPerDay * med.courseTotal)) * 100)
+      : null;
+
+  return (
+    <div className="mt-2 border-t border-ink-800 pt-2">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1 text-xs text-ink-500 transition hover:text-ink-100"
+        aria-expanded={open}
+      >
+        <span className="inline-block w-3">{open ? "▾" : "▸"}</span> История приёмов
+      </button>
+
+      {open ? (
+        hist.isLoading ? (
+          <div className="mt-2 h-16 animate-pulse rounded-lg bg-ink-800/40" />
+        ) : h && h.days.length > 0 ? (
+          <div className="mt-2 space-y-2">
+            <p className="text-xs text-ink-400">
+              Отмечено приёмов: <span className="font-semibold text-ink-100">{h.totalTaken}</span> · дней: {h.activeDays}
+              {h.firstDate ? ` · ${fmtDate(h.firstDate)} — ${fmtDate(h.lastDate)}` : ""}
+              {adherence != null ? <span className="text-ink-500"> · {adherence}% курса</span> : null}
+            </p>
+            <ul className="max-h-48 space-y-0.5 overflow-auto pr-1 text-sm">
+              {[...h.days].reverse().map((d) => {
+                const done = d.count >= h.timesPerDay;
+                return (
+                  <li key={d.date} className="flex items-center justify-between rounded-lg px-2 py-1 odd:bg-ink-800/30">
+                    <span className="text-ink-300">{fmtDate(d.date)}</span>
+                    <span className={done ? "font-medium text-good" : "text-ink-400"}>
+                      {d.count} / {h.timesPerDay}
+                      {done ? " ✓" : ""}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : (
+          <p className="mt-2 text-xs text-ink-500">Пока нет ни одного отмеченного приёма.</p>
+        )
+      ) : null}
+    </div>
   );
 }

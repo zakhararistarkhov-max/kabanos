@@ -56,7 +56,10 @@ export function useUpdateDish(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: DishInput) => api<Dish>(`/nutrition/dishes/${id}`, { method: "PUT", body: JSON.stringify(input) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["dish", id] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dish", id] });
+      qc.invalidateQueries({ queryKey: ["dishes"] });
+    },
   });
 }
 

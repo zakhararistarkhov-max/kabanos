@@ -187,8 +187,10 @@ func (r *DishRepo) Update(ctx context.Context, d *Dish, ingredients []Ingredient
 				return err
 			}
 		}
+		// image_key uses COALESCE so an edit that doesn't re-upload a photo (nil
+		// key) preserves the existing one rather than clearing it.
 		const q = `
-			UPDATE dishes SET name=$3, description=$4, recipe=$5, image_key=$6,
+			UPDATE dishes SET name=$3, description=$4, recipe=$5, image_key=COALESCE($6, image_key),
 				kcal_per_100g=$7, protein_per_100g=$8, fat_per_100g=$9, carbs_per_100g=$10,
 				serving_grams=$11, updated_at=now()
 			WHERE id=$1 AND created_by=$2`

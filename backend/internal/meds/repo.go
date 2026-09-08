@@ -3,6 +3,7 @@ package meds
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -27,6 +28,45 @@ func scan(row pgx.Row) (*Medication, error) {
 		return nil, err
 	}
 	return &m, nil
+}
+
+// Get returns a single medication owned by the user, or ErrNotFound.
+func (r *Repo) Get(ctx context.Context, id, userID uuid.UUID) (*Medication, error) {
+	const q = `SELECT ` + cols + ` FROM medications WHERE id=$1 AND user_id=$2`
+	return scan(r.db.Read().QueryRow(ctx, q, id, userID))
+}
+
+// IntakeDay is the number of intakes logged for one calendar day.
+type IntakeDay struct {
+	Date  time.Time
+	Count int
+}
+
+// IntakeHistory returns, oldest first, the days on which the given course had at
+// least one intake logged, with the per-day count. Used to show the user when
+// and how consistently they took a course.
+func (r *Repo) IntakeHistory(ctx context.Context, medID, userID uuid.UUID) ([]IntakeDay, error) {
+	const q = `
+		SELECT taken_on, count(*)::int
+		FROM medication_intakes
+		WHERE medication_id=$1 AND user_id=$2
+		GROUP BY taken_on
+		ORDER BY taken_on`
+	rows, err := r.db.Read().Query(ctx, q, medID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []IntakeDay{}
+	for rows.Next() {
+		var d IntakeDay
+		if err := rows.Scan(&d.Date, &d.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
 }
 
 func (r *Repo) Create(ctx context.Context, userID uuid.UUID, in Input) (*Medication, error) {

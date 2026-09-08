@@ -70,6 +70,46 @@ func daysBetween(a, b time.Time) int {
 	return int(bu.Sub(au).Hours() / 24)
 }
 
+// HistoryDay is one calendar day of a course with the number of intakes logged.
+type HistoryDay struct {
+	Date  string
+	Count int
+}
+
+// History is a course's full intake log plus derived totals, letting the user
+// review when and how consistently they took it.
+type History struct {
+	Medication Medication
+	Days       []HistoryDay
+	TotalTaken int // total intakes logged across the whole course
+	ActiveDays int // distinct days with at least one intake
+	FirstDate  string
+	LastDate   string
+}
+
+// History returns the intake log for a course owned by the user.
+func (s *Service) History(ctx context.Context, medID, userID uuid.UUID) (*History, error) {
+	med, err := s.repo.Get(ctx, medID, userID)
+	if err != nil {
+		return nil, err
+	}
+	days, err := s.repo.IntakeHistory(ctx, medID, userID)
+	if err != nil {
+		return nil, err
+	}
+	h := History{Medication: *med, Days: make([]HistoryDay, 0, len(days))}
+	for _, d := range days {
+		h.Days = append(h.Days, HistoryDay{Date: d.Date.Format(dateLayout), Count: d.Count})
+		h.TotalTaken += d.Count
+	}
+	h.ActiveDays = len(days)
+	if len(days) > 0 {
+		h.FirstDate = days[0].Date.Format(dateLayout)
+		h.LastDate = days[len(days)-1].Date.Format(dateLayout)
+	}
+	return &h, nil
+}
+
 func (s *Service) Create(ctx context.Context, userID uuid.UUID, in Input) (*Medication, error) {
 	return s.repo.Create(ctx, userID, in)
 }

@@ -2,12 +2,22 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, browserTZ } from "@/lib/api";
-import type { Medication } from "@/lib/types";
+import type { MedHistory, Medication } from "@/lib/types";
 
 export function useMeds() {
   return useQuery<{ items: Medication[]; date: string }>({
     queryKey: ["meds"],
     queryFn: () => api(`/meds?tz=${encodeURIComponent(browserTZ())}`),
+  });
+}
+
+// useMedHistory fetches a course's full intake log. Pass enabled=false to defer
+// the request until the user opens the history panel.
+export function useMedHistory(id: string, enabled: boolean) {
+  return useQuery<MedHistory>({
+    queryKey: ["meds", "history", id],
+    queryFn: () => api<MedHistory>(`/meds/${id}/history`),
+    enabled,
   });
 }
 

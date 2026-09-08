@@ -5,6 +5,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -62,8 +63,28 @@ export default function WeightPage() {
   }
 
   const bmiInfo = data?.bmiCategory ? BMI_LABELS[data.bmiCategory] : undefined;
-  const toGoal =
-    data?.latestKg != null && data?.targetKg != null ? +(data.latestKg - data.targetKg).toFixed(1) : null;
+  const latestKg = data?.latestKg ?? null;
+  const targetKg = data?.targetKg ?? null;
+  const toGoal = latestKg != null && targetKg != null ? +(latestKg - targetKg).toFixed(1) : null;
+
+  // Short human description of the remaining distance to the goal weight.
+  const goalText =
+    toGoal == null
+      ? null
+      : toGoal === 0
+        ? "цель достигнута 🎯"
+        : toGoal > 0
+          ? `осталось сбросить ${toGoal} кг`
+          : `ниже цели на ${Math.abs(toGoal)} кг`;
+
+  // Y-axis range that always includes the goal line, so the gap to it is
+  // visible on the chart even when the goal sits outside the measured range.
+  const yDomain = useMemo<[number, number]>(() => {
+    const ys = chartData.map((d) => d.kg);
+    if (targetKg != null) ys.push(targetKg);
+    if (ys.length === 0) return [0, 100];
+    return [Math.floor(Math.min(...ys) - 2), Math.ceil(Math.max(...ys) + 2)];
+  }, [chartData, targetKg]);
 
   return (
     <div className="space-y-6">
@@ -142,7 +163,18 @@ export default function WeightPage() {
 
         {/* chart */}
         <div className="card">
-          <h2 className="mb-4 font-semibold">Динамика</h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-semibold">Динамика</h2>
+            {goalText ? (
+              <span
+                className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                  toGoal === 0 ? "bg-good/15 text-good" : "bg-brand/10 text-brand"
+                }`}
+              >
+                {goalText}
+              </span>
+            ) : null}
+          </div>
           {chartData.length > 0 ? (
             <div className="h-72 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -151,7 +183,7 @@ export default function WeightPage() {
                   <XAxis dataKey="day" tick={{ fill: "#64748b", fontSize: 12 }} tickLine={false} axisLine={false} />
                   <YAxis
                     width={52}
-                    domain={["dataMin - 2", "dataMax + 2"]}
+                    domain={yDomain}
                     tick={{ fill: "#64748b", fontSize: 12 }}
                     tickLine={false}
                     axisLine={false}
@@ -162,8 +194,32 @@ export default function WeightPage() {
                     contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 12, color: "#e2e8f0" }}
                     formatter={(v: number) => [`${v} кг`, "Вес"]}
                   />
-                  {data?.targetKg != null ? (
-                    <ReferenceLine y={data.targetKg} stroke="#34d399" strokeDasharray="4 4" label={{ value: "цель", fill: "#34d399", fontSize: 11 }} />
+                  {/* Shaded gap between the latest weight and the goal, so the
+                      distance still to go reads at a glance. */}
+                  {targetKg != null && latestKg != null && toGoal !== 0 ? (
+                    <ReferenceArea
+                      y1={Math.min(latestKg, targetKg)}
+                      y2={Math.max(latestKg, targetKg)}
+                      fill={toGoal! > 0 ? "#38bdf8" : "#f59e0b"}
+                      fillOpacity={0.08}
+                      stroke="none"
+                    />
+                  ) : null}
+                  {targetKg != null ? (
+                    <ReferenceLine
+                      y={targetKg}
+                      stroke="#34d399"
+                      strokeDasharray="4 4"
+                      label={{
+                        value:
+                          toGoal != null && toGoal > 0
+                            ? `цель ${targetKg} кг · ${goalText}`
+                            : `цель ${targetKg} кг`,
+                        position: "insideBottomRight",
+                        fill: "#34d399",
+                        fontSize: 11,
+                      }}
+                    />
                   ) : null}
                   <Line type="monotone" dataKey="kg" stroke="#38bdf8" strokeWidth={2.5} dot={{ r: 3, fill: "#38bdf8" }} activeDot={{ r: 5 }} />
                 </LineChart>
