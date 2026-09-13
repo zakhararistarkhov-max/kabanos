@@ -34,6 +34,10 @@ type Config struct {
 	Telegram Telegram
 	S3       S3
 	VAPID    VAPID
+
+	// CalendarEncKey optionally encrypts stored CalDAV app passwords. When empty
+	// a key is derived from JWT_SECRET (see calendar.DeriveKey).
+	CalendarEncKey []byte
 }
 
 // S3 configures object storage (MinIO in dev, any S3-compatible store in prod)
@@ -158,6 +162,7 @@ func Load() (*Config, error) {
 		HTTPAddr:        env("HTTP_ADDR", ":8080"),
 		ShutdownTimeout: envDuration("SHUTDOWN_TIMEOUT", 15*time.Second),
 		PublicAppURL:    env("PUBLIC_APP_URL", "http://localhost:3000"),
+		CalendarEncKey:  []byte(env("CALENDAR_ENC_KEY", "")),
 		Postgres: Postgres{
 			DSN:         env("POSTGRES_DSN", "postgres://kabanos:kabanos@localhost:5432/kabanos?sslmode=disable"),
 			ReplicaDSNs: envList("POSTGRES_REPLICA_DSNS"),

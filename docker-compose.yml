@@ -43,6 +43,9 @@ x-backend-env: &backend-env
   # HTTPS app page blocks the upload/preview as mixed content.
   S3_PUBLIC_USE_SSL: ${S3_PUBLIC_USE_SSL:-false}
   S3_ENABLED: "true"
+  # Optional dedicated key for encrypting stored CalDAV app passwords. Empty =
+  # derive from JWT_SECRET.
+  CALENDAR_ENC_KEY: ${CALENDAR_ENC_KEY:-}
 
 services:
   postgres:

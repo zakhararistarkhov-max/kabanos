@@ -334,6 +334,30 @@ export interface Reminder {
   lastFiredAt: string | null;
 }
 
+// --- calendar (CalDAV / Yandex) ---
+
+export interface CalendarStatus {
+  connected: boolean;
+  provider: string;
+  login: string;
+  calendarName: string;
+  calendarUrl: string;
+  enabled: boolean;
+  lastSyncAt: string | null;
+  lastError: string;
+}
+
+export interface RemoteCalendar {
+  url: string;
+  name: string;
+}
+
+export interface CalendarSyncResult {
+  pushed: number;
+  pulled: number;
+  deleted: number;
+}
+
 // --- GTD (Getting Things Done) ---
 
 export type GtdBucket = "inbox" | "next" | "waiting" | "calendar" | "someday" | "reference";

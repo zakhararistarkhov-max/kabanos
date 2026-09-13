@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kabanos/backend/internal/auth"
+	"github.com/kabanos/backend/internal/calendar"
 	"github.com/kabanos/backend/internal/config"
 	"github.com/kabanos/backend/internal/diary"
 	"github.com/kabanos/backend/internal/gtd"
@@ -114,6 +116,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	pushRepo := push.NewRepo(db)
 	remindersRepo := reminders.NewRepo(db)
 	gtdRepo := gtd.NewRepo(db)
+	calendarRepo := calendar.NewRepo(db)
 
 	// --- services ---
 	authSvc := auth.NewService(db, users, auth.Config{
@@ -133,6 +136,10 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	pushSvc := push.NewService(pushRepo, cfg.VAPID, logger)
 	remindersSvc := reminders.NewService(remindersRepo)
 	gtdSvc := gtd.NewService(gtdRepo)
+	calendarSvc, err := calendar.NewService(calendarRepo, calendar.DeriveKey(cfg.CalendarEncKey, cfg.Auth.JWTSecret), logger)
+	if err != nil {
+		return fmt.Errorf("calendar service: %w", err)
+	}
 
 	// --- handlers ---
 	authH := auth.NewHandler(authSvc, users)
@@ -146,6 +153,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	pushH := push.NewHandler(pushSvc)
 	remindersH := reminders.NewHandler(remindersSvc)
 	gtdH := gtd.NewHandler(gtdSvc)
+	calendarH := calendar.NewHandler(calendarSvc)
 
 	// --- rate limiters (shared across replicas via Redis) ---
 	authLimiter := httpx.NewRateLimiter(rdb, 20, time.Minute) // brute-force protection
@@ -201,6 +209,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 			r.Mount("/push", pushH.Routes())
 			r.Mount("/reminders", remindersH.Routes())
 			r.Mount("/gtd", gtdH.Routes())
+			r.Mount("/calendar", calendarH.Routes())
 		})
 	})
 

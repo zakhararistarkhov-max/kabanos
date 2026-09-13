@@ -6,6 +6,7 @@ import { Field } from "@/components/Field";
 import { api, ApiRequestError } from "@/lib/api";
 import { useInvalidateSession, useSession } from "@/hooks/useSession";
 import { usePush } from "@/hooks/usePush";
+import { CalendarCard } from "@/components/CalendarCard";
 import type { User } from "@/lib/types";
 
 export default function SettingsPage() {
@@ -93,6 +94,8 @@ export default function SettingsPage() {
       </form>
 
       <NotificationsCard />
+
+      <CalendarCard />
 
       <div className="card text-sm text-ink-500">
         <div className="text-ink-300">Аккаунт</div>

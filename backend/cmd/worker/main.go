@@ -18,6 +18,7 @@ import (
 	// Embed tzdata for the static runtime image (see cmd/api/main.go).
 	_ "time/tzdata"
 
+	"github.com/kabanos/backend/internal/calendar"
 	"github.com/kabanos/backend/internal/config"
 	"github.com/kabanos/backend/internal/mailer"
 	"github.com/kabanos/backend/internal/notify"
@@ -31,6 +32,7 @@ import (
 const (
 	pollInterval     = 2 * time.Second
 	reminderInterval = time.Minute
+	calendarInterval = 10 * time.Minute
 	batchSize        = 20
 	maxAttempts      = 5
 )
@@ -74,6 +76,10 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 
 	pushSvc := push.NewService(push.NewRepo(db), cfg.VAPID, logger)
 	remRepo := reminders.NewRepo(db)
+	calSvc, err := calendar.NewService(calendar.NewRepo(db), calendar.DeriveKey(cfg.CalendarEncKey, cfg.Auth.JWTSecret), logger)
+	if err != nil {
+		return fmt.Errorf("calendar service: %w", err)
+	}
 
 	// Make the effective mail destination unmistakable in the logs — the #1
 	// source of "why didn't my email arrive?" is SMTP still pointing at the dev
@@ -95,6 +101,8 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	defer ticker.Stop()
 	remTicker := time.NewTicker(reminderInterval)
 	defer remTicker.Stop()
+	calTicker := time.NewTicker(calendarInterval)
+	defer calTicker.Stop()
 
 	for {
 		select {
@@ -104,6 +112,8 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 			processBatch(ctx, box, d, logger)
 		case <-remTicker.C:
 			processReminders(ctx, remRepo, pushSvc, logger)
+		case <-calTicker.C:
+			calSvc.SyncAll(ctx)
 		}
 	}
 }
