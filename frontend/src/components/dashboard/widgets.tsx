@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ComponentType } from "react";
+import { useState, type ComponentType } from "react";
 import {
   BookText,
   ClipboardList,
@@ -9,6 +9,7 @@ import {
   Dumbbell,
   Flame,
   HeartPulse,
+  ListChecks,
   Pill,
   Salad,
   Scale,
@@ -25,6 +26,7 @@ import { useWorkouts } from "@/hooks/useTraining";
 import { useMeds, useTakeIntake, useUndoIntake } from "@/hooks/useMeds";
 import { usePressureSummary } from "@/hooks/useBloodPressure";
 import { useDiaryDay } from "@/hooks/useDiary";
+import { useCaptureItem, useGtdItems, useGtdReview, useToggleDone } from "@/hooks/useGtd";
 import { DIFFICULTY_LABELS, DIFFICULTY_STYLE, label } from "@/lib/training";
 import { pressureCat } from "@/lib/pressure";
 
@@ -373,6 +375,91 @@ function QuickWidget() {
   );
 }
 
+function GtdWidget() {
+  const review = useGtdReview();
+  const next = useGtdItems({ bucket: "next", done: false });
+  const capture = useCaptureItem();
+  const toggle = useToggleDone();
+  const [title, setTitle] = useState("");
+
+  const r = review.data;
+  const items = (next.data?.items ?? []).slice(0, 4);
+
+  function add() {
+    const t = title.trim();
+    if (!t) return;
+    capture.mutate({ title: t, bucket: "inbox" });
+    setTitle("");
+  }
+
+  return (
+    <div className="card h-full">
+      <div className="flex items-center justify-between">
+        <h2 className="flex items-center gap-2 font-semibold">
+          <IconBadge Icon={ListChecks} />
+          GTD
+        </h2>
+        <Link href="/gtd" className="text-sm text-ink-500 hover:text-ink-100">
+          открыть →
+        </Link>
+      </div>
+
+      {/* quick capture straight into the inbox */}
+      <div className="mt-3 flex gap-2">
+        <input
+          className="input"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+          placeholder="Быстро записать во «Входящие»…"
+        />
+        <button onClick={add} disabled={capture.isPending || !title.trim()} className="btn-primary shrink-0 !py-2">
+          +
+        </button>
+      </div>
+
+      {/* counts */}
+      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+        <Link href="/gtd" className={`chip ${r && r.inboxCount > 0 ? "border-warn/50 text-warn" : ""}`}>
+          📥 Входящие {r?.inboxCount ?? 0}
+        </Link>
+        <span className="chip">⚡ Следующие {r?.nextCount ?? 0}</span>
+        <span className="chip">📅 {r?.calendarUpcoming ?? 0}</span>
+      </div>
+
+      {/* top next actions */}
+      {next.data ? (
+        items.length > 0 ? (
+          <ul className="mt-3 space-y-1.5">
+            {items.map((it) => (
+              <li key={it.id} className="flex items-center gap-2 rounded-lg border border-ink-800 bg-ink-950/40 px-2.5 py-1.5">
+                <input
+                  type="checkbox"
+                  checked={it.done}
+                  onChange={(e) => toggle.mutate({ id: it.id, done: e.target.checked })}
+                  className="h-4 w-4 shrink-0 accent-brand"
+                  aria-label="Выполнено"
+                />
+                <span className="min-w-0 flex-1 truncate text-sm">{it.title}</span>
+                {it.context ? <span className="shrink-0 text-xs text-brand">{it.context}</span> : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-3 text-sm text-ink-500">Нет следующих действий. Запишите мысль выше или откройте GTD.</p>
+        )
+      ) : (
+        <Skeleton h="h-24" />
+      )}
+    </div>
+  );
+}
+
 // ---- registry ----
 
 export const WIDGETS: WidgetMeta[] = [
@@ -383,6 +470,7 @@ export const WIDGETS: WidgetMeta[] = [
   { id: "diary", title: "Дневник", icon: BookText, span: 1, Component: DiaryWidget },
   { id: "macros", title: "Баланс БЖУ", icon: Salad, span: 1, Component: MacrosWidget },
   { id: "quick", title: "Быстрые действия", icon: Zap, span: 3, Component: QuickWidget },
+  { id: "gtd", title: "GTD", icon: ListChecks, span: 2, Component: GtdWidget },
   { id: "training", title: "Тренировки", icon: ClipboardList, span: 2, Component: TrainingWidget },
   { id: "meds", title: "Таблетки", icon: Pill, span: 2, Component: MedsWidget },
 ];
