@@ -22,6 +22,7 @@ import (
 	"github.com/kabanos/backend/internal/auth"
 	"github.com/kabanos/backend/internal/config"
 	"github.com/kabanos/backend/internal/diary"
+	"github.com/kabanos/backend/internal/gtd"
 	"github.com/kabanos/backend/internal/httpx"
 	"github.com/kabanos/backend/internal/meds"
 	"github.com/kabanos/backend/internal/nutrition"
@@ -112,6 +113,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	diaryRepo := diary.NewRepo(db)
 	pushRepo := push.NewRepo(db)
 	remindersRepo := reminders.NewRepo(db)
+	gtdRepo := gtd.NewRepo(db)
 
 	// --- services ---
 	authSvc := auth.NewService(db, users, auth.Config{
@@ -130,6 +132,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	diarySvc := diary.NewService(diaryRepo, store)
 	pushSvc := push.NewService(pushRepo, cfg.VAPID, logger)
 	remindersSvc := reminders.NewService(remindersRepo)
+	gtdSvc := gtd.NewService(gtdRepo)
 
 	// --- handlers ---
 	authH := auth.NewHandler(authSvc, users)
@@ -142,6 +145,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	diaryH := diary.NewHandler(diarySvc)
 	pushH := push.NewHandler(pushSvc)
 	remindersH := reminders.NewHandler(remindersSvc)
+	gtdH := gtd.NewHandler(gtdSvc)
 
 	// --- rate limiters (shared across replicas via Redis) ---
 	authLimiter := httpx.NewRateLimiter(rdb, 20, time.Minute) // brute-force protection
@@ -196,6 +200,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 			r.Mount("/diary", diaryH.Routes())
 			r.Mount("/push", pushH.Routes())
 			r.Mount("/reminders", remindersH.Routes())
+			r.Mount("/gtd", gtdH.Routes())
 		})
 	})
 

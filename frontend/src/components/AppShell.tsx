@@ -12,6 +12,7 @@ import {
   Flame,
   HeartPulse,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   Menu,
   Pill,
@@ -37,6 +38,7 @@ const NAV: { href: string; label: string; Icon: LucideIcon }[] = [
   { href: "/weight", label: "Вес", Icon: Scale },
   { href: "/pressure", label: "Давление", Icon: HeartPulse },
   { href: "/diary", label: "Дневник", Icon: BookText },
+  { href: "/gtd", label: "GTD", Icon: ListChecks },
   { href: "/reminders", label: "Напоминания", Icon: AlarmClock },
   { href: "/settings", label: "Настройки", Icon: Settings },
 ];

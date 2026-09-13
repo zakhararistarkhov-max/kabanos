@@ -334,6 +334,62 @@ export interface Reminder {
   lastFiredAt: string | null;
 }
 
+// --- GTD (Getting Things Done) ---
+
+export type GtdBucket = "inbox" | "next" | "waiting" | "calendar" | "someday" | "reference";
+export type GtdEnergy = "" | "low" | "medium" | "high";
+export type GtdProjectStatus = "active" | "someday" | "done" | "dropped";
+
+export interface GtdProject {
+  id: string;
+  title: string;
+  outcome: string;
+  notes: string;
+  status: GtdProjectStatus;
+  openActions: number;
+  nextActions: number;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface GtdItem {
+  id: string;
+  projectId: string | null;
+  projectTitle: string;
+  title: string;
+  notes: string;
+  bucket: GtdBucket;
+  context: string;
+  waitingFor: string;
+  scheduledAt: string | null;
+  endAt: string | null;
+  allDay: boolean;
+  dueOn: string | null;
+  energy: GtdEnergy;
+  timeMinutes: number | null;
+  priority: number;
+  done: boolean;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export interface GtdContextCount {
+  context: string;
+  count: number;
+}
+
+export interface GtdReview {
+  inboxCount: number;
+  nextCount: number;
+  waitingCount: number;
+  somedayCount: number;
+  calendarUpcoming: number;
+  byContext: GtdContextCount[];
+  stalledProjects: GtdProject[];
+  overdueCalendar: GtdItem[];
+  completedThisWeek: number;
+}
+
 export interface Medication {
   id: string;
   name: string;
