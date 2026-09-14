@@ -66,6 +66,17 @@ export interface WeightSummary {
 
 export type Meal = "breakfast" | "lunch" | "dinner" | "snack";
 
+// A product resolved from a scanned barcode (Open Food Facts, via our API).
+export interface FoodProduct {
+  barcode: string;
+  name: string;
+  brand: string;
+  imageUrl: string;
+  per100g: Macros;
+  servingGrams: number | null;
+  source: string;
+}
+
 export interface Macros {
   kcal: number;
   protein: number;

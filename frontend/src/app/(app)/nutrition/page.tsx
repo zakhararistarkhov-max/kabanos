@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { ScanBarcode } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -18,6 +19,7 @@ import {
   YAxis,
 } from "recharts";
 import { Field } from "@/components/Field";
+import { BarcodeAddFood } from "@/components/nutrition/BarcodeAddFood";
 import { isoDaysAgo, todayISO } from "@/lib/api";
 import {
   useActivityTypes,
@@ -82,6 +84,7 @@ export default function NutritionPage() {
   const addActivity = useAddActivity();
   const deleteActivity = useDeleteActivity();
   const setGoal = useSetNutritionGoal();
+  const [scanOpen, setScanOpen] = useState(false);
 
   const d = day.data;
 
@@ -137,10 +140,19 @@ export default function NutritionPage() {
           <h1 className="text-2xl font-bold">Калории и рацион</h1>
           <p className="text-sm text-ink-500">Сегодня, {d?.date ?? "…"}</p>
         </div>
-        <Link href="/dishes" className="btn-ghost">
-          🍽️ Выбрать блюдо
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setScanOpen((s) => !s)} className={scanOpen ? "btn-primary" : "btn-ghost"}>
+            <ScanBarcode size={16} /> Сканировать штрихкод
+          </button>
+          <Link href="/dishes" className="btn-ghost">
+            🍽️ Выбрать блюдо
+          </Link>
+        </div>
       </div>
+
+      {scanOpen ? (
+        <BarcodeAddFood onAdd={(v) => addManual.mutate(v)} onClose={() => setScanOpen(false)} />
+      ) : null}
 
       {d ? (
         <>

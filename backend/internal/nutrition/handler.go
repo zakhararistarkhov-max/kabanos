@@ -34,6 +34,8 @@ func (h *Handler) Routes() http.Handler {
 	r.Post("/diet", h.addManual)
 	r.Delete("/diet/{id}", h.deleteDiet)
 
+	r.Get("/barcode/{code}", h.barcode)
+
 	r.Route("/dishes", func(r chi.Router) {
 		r.Get("/", h.listDishes)
 		r.Post("/", h.createDish)
@@ -254,6 +256,50 @@ type addManualRequest struct {
 	Carbs      float64    `json:"carbs"`
 	Meal       *string    `json:"meal"`
 	ConsumedAt *time.Time `json:"consumedAt"`
+}
+
+type barcodeDTO struct {
+	Barcode      string   `json:"barcode"`
+	Name         string   `json:"name"`
+	Brand        string   `json:"brand"`
+	ImageURL     string   `json:"imageUrl"`
+	Per100g      Macros   `json:"per100g"`
+	ServingGrams *float64 `json:"servingGrams"`
+	Source       string   `json:"source"`
+}
+
+// validBarcode accepts EAN-8/EAN-13/UPC style codes: 8–14 digits.
+func validBarcode(code string) bool {
+	if len(code) < 8 || len(code) > 14 {
+		return false
+	}
+	for _, r := range code {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *Handler) barcode(w http.ResponseWriter, r *http.Request) {
+	code := chi.URLParam(r, "code")
+	if !validBarcode(code) {
+		httpx.Error(w, r, httpx.ErrBadRequest("некорректный штрихкод"))
+		return
+	}
+	p, err := h.svc.LookupBarcode(r.Context(), code)
+	if err != nil {
+		if errors.Is(err, ErrBarcodeNotFound) {
+			httpx.Error(w, r, httpx.ErrNotFound("продукт с таким штрихкодом не найден"))
+			return
+		}
+		httpx.Error(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, barcodeDTO{
+		Barcode: p.Barcode, Name: p.Name, Brand: p.Brand, ImageURL: p.ImageURL,
+		Per100g: p.Per100, ServingGrams: p.ServingGrams, Source: p.Source,
+	})
 }
 
 func (h *Handler) addManual(w http.ResponseWriter, r *http.Request) {

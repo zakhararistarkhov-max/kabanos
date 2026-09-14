@@ -29,6 +29,7 @@ import (
 	"github.com/kabanos/backend/internal/meds"
 	"github.com/kabanos/backend/internal/nutrition"
 	"github.com/kabanos/backend/internal/observability"
+	"github.com/kabanos/backend/internal/openfoodfacts"
 	"github.com/kabanos/backend/internal/postgres"
 	"github.com/kabanos/backend/internal/pressure"
 	"github.com/kabanos/backend/internal/push"
@@ -108,6 +109,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	weightRepo := weight.NewRepo(db)
 	dishRepo := nutrition.NewDishRepo(db)
 	logRepo := nutrition.NewLogRepo(db)
+	barcodeRepo := nutrition.NewBarcodeRepo(db)
 	exerciseRepo := training.NewExerciseRepo(db)
 	workoutRepo := training.NewWorkoutRepo(db)
 	medsRepo := meds.NewRepo(db)
@@ -128,7 +130,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	}, logger)
 	waterSvc := water.NewService(waterRepo)
 	weightSvc := weight.NewService(weightRepo, users)
-	nutritionSvc := nutrition.NewService(dishRepo, logRepo, store, weightAdapter{repo: weightRepo})
+	nutritionSvc := nutrition.NewService(dishRepo, logRepo, store, weightAdapter{repo: weightRepo}, barcodeRepo, openfoodfacts.New(cfg.PublicAppURL))
 	trainingSvc := training.NewService(exerciseRepo, workoutRepo, store)
 	medsSvc := meds.NewService(medsRepo)
 	pressureSvc := pressure.NewService(pressureRepo)

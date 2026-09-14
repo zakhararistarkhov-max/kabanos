@@ -8,18 +8,22 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kabanos/backend/internal/openfoodfacts"
 	"github.com/kabanos/backend/internal/postgres"
 	"github.com/kabanos/backend/internal/storage"
 	"github.com/kabanos/backend/internal/timex"
 )
 
+// ErrBarcodeNotFound means no product matched the scanned barcode.
+var ErrBarcodeNotFound = errors.New("barcode not found")
+
 // Domain errors surfaced to the handler.
 var (
-	ErrServingUnknown = errors.New("dish has no serving size; specify grams")
-	ErrNoWeight       = errors.New("body weight required to compute burned calories; add a weight entry or provide kcal")
-	ErrInvalidActivity = errors.New("provide either kcal, or an activity type/MET with duration")
-	ErrUnsupportedMedia = errors.New("unsupported image type")
-	ErrStorageDisabled  = errors.New("image storage is disabled")
+	ErrServingUnknown     = errors.New("dish has no serving size; specify grams")
+	ErrNoWeight           = errors.New("body weight required to compute burned calories; add a weight entry or provide kcal")
+	ErrInvalidActivity    = errors.New("provide either kcal, or an activity type/MET with duration")
+	ErrUnsupportedMedia   = errors.New("unsupported image type")
+	ErrStorageDisabled    = errors.New("image storage is disabled")
 	ErrIngredientNotFound = errors.New("ingredient dish not found")
 )
 
@@ -37,14 +41,44 @@ type WeightProvider interface {
 }
 
 type Service struct {
-	dishes  *DishRepo
-	log     *LogRepo
-	store   *storage.Storage
-	weights WeightProvider
+	dishes   *DishRepo
+	log      *LogRepo
+	store    *storage.Storage
+	weights  WeightProvider
+	barcodes *BarcodeRepo
+	off      *openfoodfacts.Client
 }
 
-func NewService(dishes *DishRepo, log *LogRepo, store *storage.Storage, weights WeightProvider) *Service {
-	return &Service{dishes: dishes, log: log, store: store, weights: weights}
+func NewService(dishes *DishRepo, log *LogRepo, store *storage.Storage, weights WeightProvider, barcodes *BarcodeRepo, off *openfoodfacts.Client) *Service {
+	return &Service{dishes: dishes, log: log, store: store, weights: weights, barcodes: barcodes, off: off}
+}
+
+// LookupBarcode resolves a product by barcode, using the shared cache first and
+// falling back to Open Food Facts (whose result is then cached).
+func (s *Service) LookupBarcode(ctx context.Context, barcode string) (*BarcodeProduct, error) {
+	if cached, err := s.barcodes.Get(ctx, barcode); err == nil {
+		return cached, nil
+	} else if !errors.Is(err, postgres.ErrNotFound) {
+		return nil, err
+	}
+
+	p, err := s.off.Lookup(ctx, barcode)
+	if err != nil {
+		if errors.Is(err, openfoodfacts.ErrNotFound) {
+			return nil, ErrBarcodeNotFound
+		}
+		return nil, err
+	}
+	product := BarcodeProduct{
+		Barcode: p.Barcode, Name: p.Name, Brand: p.Brand, ImageURL: p.ImageURL,
+		Per100:       Macros{Kcal: p.KcalPer100, Protein: p.ProteinPer100, Fat: p.FatPer100, Carbs: p.CarbsPer100},
+		ServingGrams: p.ServingGrams, Source: "openfoodfacts",
+	}
+	if err := s.barcodes.Put(ctx, product); err != nil {
+		// Caching is best-effort; still return the product.
+		_ = err
+	}
+	return &product, nil
 }
 
 // defaultGoal is a reasonable placeholder split (25/30/45 P/F/C at 2000 kcal).

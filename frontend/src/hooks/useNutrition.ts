@@ -2,7 +2,15 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, browserTZ } from "@/lib/api";
-import type { ActivityType, DaySummary, DayTotals, Macros, Meal, NutritionGoal } from "@/lib/types";
+import type { ActivityType, DaySummary, DayTotals, FoodProduct, Macros, Meal, NutritionGoal } from "@/lib/types";
+
+// useLookupBarcode resolves a scanned barcode into a product (name + per-100g
+// macros) via our API, which proxies and caches Open Food Facts.
+export function useLookupBarcode() {
+  return useMutation<FoodProduct, Error, string>({
+    mutationFn: (code: string) => api<FoodProduct>(`/nutrition/barcode/${encodeURIComponent(code)}`),
+  });
+}
 
 export function useNutritionDay(date?: string) {
   return useQuery<DaySummary>({
