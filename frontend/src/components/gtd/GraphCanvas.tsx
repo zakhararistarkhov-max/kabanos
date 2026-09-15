@@ -23,17 +23,13 @@ import {
 import "@xyflow/react/dist/style.css";
 import { CalendarClock, ListChecks, Plus, StickyNote } from "lucide-react";
 import {
-  uploadGraphImage,
   useAddEdge,
-  useAddNode,
-  useAddNodeImage,
   useDeleteEdge,
   useDeleteNode,
   useGraph,
   useMoveNode,
-  useRemoveNodeImage,
-  useUpdateNode,
 } from "@/hooks/useGtdGraph";
+import { NodeEditor } from "@/components/gtd/NodeEditor";
 import type { GtdColor, GtdGraphNode, GtdGraphSummary, GtdNodeKind } from "@/lib/types";
 
 interface NodeData extends Record<string, unknown> {
@@ -49,6 +45,8 @@ interface NodeData extends Record<string, unknown> {
   onSelect: (id: string) => void;
 }
 type AppNode = Node<NodeData>;
+
+type EditorState = { mode: "new"; kind: GtdNodeKind } | { mode: "edit"; nodeId: string } | null;
 
 const COLOR_RING: Record<GtdColor, string> = {
   green: "border-good/70 bg-good/10",
@@ -125,7 +123,6 @@ function Inner({ board, title }: { board: string; title: string }) {
   const router = useRouter();
   const qc = useQueryClient();
   const graph = useGraph(board);
-  const addNode = useAddNode();
   const moveNode = useMoveNode();
   const deleteNode = useDeleteNode();
   const addEdgeMut = useAddEdge();
@@ -135,7 +132,7 @@ function Inner({ board, title }: { board: string; title: string }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [summary, setSummary] = useState<GtdGraphSummary | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editor, setEditor] = useState<EditorState>(null);
 
   const refresh = useCallback(() => {
     qc.invalidateQueries({ queryKey: ["gtd", "graph", board || "root"] });
@@ -143,9 +140,8 @@ function Inner({ board, title }: { board: string; title: string }) {
   }, [qc, board]);
 
   const openProject = useCallback((projectId: string) => router.push(`/gtd/graph/${projectId}`), [router]);
-  const selectNode = useCallback((id: string) => setSelectedId(id), []);
+  const selectNode = useCallback((id: string) => setEditor({ mode: "edit", nodeId: id }), []);
 
-  // Rebuild from server whenever the graph query updates (mount + invalidations).
   useEffect(() => {
     if (!graph.data) return;
     setNodes(graph.data.nodes.map((n) => toAppNode(n, openProject, selectNode)));
@@ -166,21 +162,11 @@ function Inner({ board, title }: { board: string; title: string }) {
     [addEdgeMut, board, refresh],
   );
 
-  async function spawn(kind: GtdNodeKind) {
-    const label = window.prompt(kind === "note" ? "Текст заметки" : kind === "project" ? "Название подпроекта" : "Название задачи");
-    if (!label || !label.trim()) return;
-    const pos = rf.screenToFlowPosition({ x: window.innerWidth / 2, y: 280 });
-    try {
-      const n = await addNode.mutateAsync({ project: board, kind, title: label.trim(), x: pos.x, y: pos.y });
-      refresh();
-      setSelectedId(n.id);
-    } catch {
-      /* ignore */
-    }
-  }
-
   const nodeTypes = useMemo<NodeTypes>(() => ({ gtd: GtdNode }), []);
-  const selected = graph.data?.nodes.find((n) => n.id === selectedId) ?? null;
+
+  const editorNode =
+    editor?.mode === "edit" ? graph.data?.nodes.find((n) => n.id === editor.nodeId) ?? null : null;
+  const editorKind: GtdNodeKind = editor?.mode === "new" ? editor.kind : editorNode?.kind ?? "task";
 
   return (
     <div className="space-y-3">
@@ -190,66 +176,62 @@ function Inner({ board, title }: { board: string; title: string }) {
           {summary ? <SummaryBar s={summary} /> : null}
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => spawn("task")} className="btn-ghost">
+          <button onClick={() => setEditor({ mode: "new", kind: "task" })} className="btn-ghost">
             <Plus size={15} /> Задача
           </button>
-          <button onClick={() => spawn("project")} className="btn-ghost">
+          <button onClick={() => setEditor({ mode: "new", kind: "project" })} className="btn-ghost">
             <Plus size={15} /> Подпроект
           </button>
-          <button onClick={() => spawn("note")} className="btn-ghost">
+          <button onClick={() => setEditor({ mode: "new", kind: "note" })} className="btn-ghost">
             <Plus size={15} /> Заметка
           </button>
         </div>
       </div>
 
-      <div className="relative flex gap-3">
-        <div className="h-[calc(100vh-18rem)] min-h-[26rem] flex-1 overflow-hidden rounded-2xl border border-ink-800 bg-ink-950/40">
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeDragStop={(_, node) => moveNode.mutate({ id: node.id, x: node.position.x, y: node.position.y })}
-            onNodesDelete={(deleted) => {
-              deleted.forEach((n) => deleteNode.mutate(n.id));
-              if (deleted.some((n) => n.id === selectedId)) setSelectedId(null);
-              refresh();
-            }}
-            onEdgesDelete={(deleted) => {
-              deleted.forEach((e) => deleteEdgeMut.mutate(e.id));
-              refresh();
-            }}
-            onNodeDoubleClick={(_, node) => {
-              const d = node.data as NodeData;
-              if (d.kind === "project" && d.refProjectId) openProject(d.refProjectId);
-            }}
-            fitView
-            proOptions={{ hideAttribution: true }}
-          >
-            <Background color="#334155" gap={18} />
-            <MiniMap pannable zoomable className="!bg-ink-900" />
-            <Controls className="!shadow-none" />
-          </ReactFlow>
-        </div>
-
-        {selected ? (
-          <NodeInspector
-            key={selected.id}
-            node={selected}
-            onClose={() => setSelectedId(null)}
-            onChanged={refresh}
-            onDelete={() => {
-              rf.deleteElements({ nodes: [{ id: selected.id }] });
-            }}
-          />
-        ) : null}
+      <div className="h-[calc(100vh-18rem)] min-h-[26rem] overflow-hidden rounded-2xl border border-ink-800 bg-ink-950/40">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onNodeDragStop={(_, node) => moveNode.mutate({ id: node.id, x: node.position.x, y: node.position.y })}
+          onNodesDelete={(deleted) => {
+            deleted.forEach((n) => deleteNode.mutate(n.id));
+            refresh();
+          }}
+          onEdgesDelete={(deleted) => {
+            deleted.forEach((e) => deleteEdgeMut.mutate(e.id));
+            refresh();
+          }}
+          onNodeDoubleClick={(_, node) => {
+            const d = node.data as NodeData;
+            if (d.kind === "project" && d.refProjectId) openProject(d.refProjectId);
+          }}
+          fitView
+          proOptions={{ hideAttribution: true }}
+        >
+          <Background color="#334155" gap={18} />
+          <MiniMap pannable zoomable className="!bg-ink-900" />
+          <Controls className="!shadow-none" />
+        </ReactFlow>
       </div>
+
+      {editor ? (
+        <NodeEditor
+          board={board}
+          kind={editorKind}
+          node={editorNode}
+          onClose={() => setEditor(null)}
+          onCreated={(id) => setEditor({ mode: "edit", nodeId: id })}
+          onChanged={refresh}
+        />
+      ) : null}
 
       {graph.isLoading ? <p className="text-sm text-ink-500">Загрузка…</p> : null}
       {nodes.length === 0 && !graph.isLoading ? (
-        <p className="text-sm text-ink-500">Пусто. Добавьте задачу, подпроект или заметку кнопками выше, кликните по ноде — откроется панель с дедлайном, заметкой и фото.</p>
+        <p className="text-sm text-ink-500">Пусто. Добавьте задачу, подпроект или заметку кнопками выше. Клик по ноде — редактор (дедлайн, заметка, фото).</p>
       ) : null}
     </div>
   );
@@ -268,110 +250,6 @@ function SummaryBar({ s }: { s: GtdGraphSummary }) {
         <span className="h-2 w-2 rounded-full bg-good" /> в запасе: {s.green}
       </span>
       {s.projectedCompletion ? <span>· план. окончание: {s.projectedCompletion}</span> : null}
-    </div>
-  );
-}
-
-function NodeInspector({
-  node,
-  onClose,
-  onChanged,
-  onDelete,
-}: {
-  node: GtdGraphNode;
-  onClose: () => void;
-  onChanged: () => void;
-  onDelete: () => void;
-}) {
-  const update = useUpdateNode();
-  const addImg = useAddNodeImage();
-  const removeImg = useRemoveNodeImage();
-  const [note, setNote] = useState(node.note);
-  const [deadline, setDeadline] = useState(node.deadline ?? "");
-  const [uploading, setUploading] = useState(false);
-
-  useEffect(() => {
-    setNote(node.note);
-    setDeadline(node.deadline ?? "");
-  }, [node.id, node.note, node.deadline]);
-
-  async function saveDeadline(v: string) {
-    setDeadline(v);
-    await update.mutateAsync({ id: node.id, deadline: v }).catch(() => undefined);
-    onChanged();
-  }
-  async function saveNote() {
-    if (note === node.note) return;
-    await update.mutateAsync({ id: node.id, note }).catch(() => undefined);
-    onChanged();
-  }
-  async function onFiles(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    if (files.length === 0) return;
-    setUploading(true);
-    try {
-      for (const f of files) {
-        const key = await uploadGraphImage(f);
-        await addImg.mutateAsync({ id: node.id, key });
-      }
-      onChanged();
-    } catch {
-      /* ignore */
-    } finally {
-      setUploading(false);
-      e.target.value = "";
-    }
-  }
-  async function removeImage(key: string) {
-    await removeImg.mutateAsync({ id: node.id, key }).catch(() => undefined);
-    onChanged();
-  }
-
-  return (
-    <div className="w-72 shrink-0 space-y-3 rounded-2xl border border-ink-800 bg-ink-950/60 p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="text-sm font-semibold">{node.label || "Нода"}</div>
-        <button onClick={onClose} className="text-xs text-ink-500 hover:text-ink-100">
-          закрыть
-        </button>
-      </div>
-
-      <div>
-        <label className="label">Дедлайн</label>
-        <input type="date" className="input" value={deadline} onChange={(e) => saveDeadline(e.target.value)} />
-      </div>
-
-      <div>
-        <label className="label">Заметка</label>
-        <textarea className="input min-h-20" value={note} onChange={(e) => setNote(e.target.value)} onBlur={saveNote} placeholder="Текст…" />
-      </div>
-
-      <div>
-        <label className="label">Фото</label>
-        <div className="grid grid-cols-3 gap-2">
-          {node.imageUrls.map((url, i) => (
-            <div key={url} className="group relative overflow-hidden rounded-lg border border-ink-800">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} alt="" className="h-16 w-full object-cover" />
-              <button
-                onClick={() => removeImage(node.imageKeys[i])}
-                className="absolute right-0.5 top-0.5 grid h-5 w-5 place-items-center rounded bg-ink-950/80 text-xs text-ink-300 hover:text-bad"
-                aria-label="Удалить фото"
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-          <label className="grid h-16 cursor-pointer place-items-center rounded-lg border border-dashed border-ink-700 text-ink-500 hover:border-brand/50">
-            {uploading ? "…" : <Plus size={16} />}
-            <input type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden" onChange={onFiles} disabled={uploading} />
-          </label>
-        </div>
-      </div>
-
-      <button onClick={onDelete} className="btn-ghost w-full text-bad">
-        Удалить ноду
-      </button>
     </div>
   );
 }
