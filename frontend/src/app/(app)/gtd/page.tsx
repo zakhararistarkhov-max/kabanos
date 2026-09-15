@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { Network } from "lucide-react";
 import { CaptureTab } from "@/components/gtd/CaptureTab";
 import { ClarifyTab } from "@/components/gtd/ClarifyTab";
 import { OrganizeTab } from "@/components/gtd/OrganizeTab";
@@ -25,9 +27,14 @@ export default function GtdPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">GTD — привести дела в порядок</h1>
-        <p className="text-sm text-ink-500">Пять шагов: собрать всё, обработать, организовать, регулярно пересматривать и спокойно делать.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">GTD — привести дела в порядок</h1>
+          <p className="text-sm text-ink-500">Пять шагов: собрать всё, обработать, организовать, регулярно пересматривать и спокойно делать.</p>
+        </div>
+        <Link href="/gtd/graph/root" className="btn-ghost shrink-0">
+          <Network size={16} /> Карта проектов
+        </Link>
       </div>
 
       {/* step tabs */}

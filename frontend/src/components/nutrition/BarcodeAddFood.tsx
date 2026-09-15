@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ApiRequestError } from "@/lib/api";
 import { useLookupBarcode } from "@/hooks/useNutrition";
+import { useCreateDish } from "@/hooks/useDishes";
 import { BarcodeScanner } from "@/components/nutrition/BarcodeScanner";
 import type { FoodProduct, Meal } from "@/lib/types";
 
@@ -18,11 +20,36 @@ type Added = { name: string; kcal: number; protein: number; fat: number; carbs: 
 // BarcodeAddFood drives the whole scan→lookup→confirm→log flow. On confirm it
 // hands an absolute-macro entry to onAdd (same shape the manual form uses).
 export function BarcodeAddFood({ onAdd, onClose }: { onAdd: (v: Added) => void; onClose: () => void }) {
+  const router = useRouter();
   const lookup = useLookupBarcode();
+  const createDish = useCreateDish();
   const [product, setProduct] = useState<FoodProduct | null>(null);
   const [grams, setGrams] = useState("100");
   const [meal, setMeal] = useState<Meal | "">("");
   const [error, setError] = useState<string | null>(null);
+
+  const dishName = (p: FoodProduct) => (p.brand && !p.name.includes(p.brand) ? `${p.name} (${p.brand})` : p.name);
+
+  async function saveAsDish() {
+    if (!product) return;
+    setError(null);
+    try {
+      const dish = await createDish.mutateAsync({
+        name: dishName(product),
+        description: `Из штрихкода ${product.barcode}`,
+        recipe: "",
+        imageKey: null,
+        kcalPer100: product.per100g.kcal,
+        proteinPer100: product.per100g.protein,
+        fatPer100: product.per100g.fat,
+        carbsPer100: product.per100g.carbs,
+        servingGrams: product.servingGrams ?? null,
+      });
+      router.push(`/dishes/${dish.id}`);
+    } catch {
+      setError("Не удалось сохранить блюдо.");
+    }
+  }
 
   async function onDetected(code: string) {
     setError(null);
@@ -52,8 +79,7 @@ export function BarcodeAddFood({ onAdd, onClose }: { onAdd: (v: Added) => void; 
 
   function confirm() {
     if (!product || !preview || g <= 0) return;
-    const name = product.brand && !product.name.includes(product.brand) ? `${product.name} (${product.brand})` : product.name;
-    onAdd({ name, kcal: preview.kcal, protein: preview.protein, fat: preview.fat, carbs: preview.carbs, meal: meal || undefined });
+    onAdd({ name: dishName(product), kcal: preview.kcal, protein: preview.protein, fat: preview.fat, carbs: preview.carbs, meal: meal || undefined });
     onClose();
   }
 
@@ -123,6 +149,9 @@ export function BarcodeAddFood({ onAdd, onClose }: { onAdd: (v: Added) => void; 
           <div className="flex flex-wrap gap-2">
             <button onClick={confirm} disabled={g <= 0} className="btn-primary">
               Добавить в рацион
+            </button>
+            <button onClick={saveAsDish} disabled={createDish.isPending} className="btn-ghost">
+              {createDish.isPending ? "Сохраняем…" : "Сохранить как блюдо"}
             </button>
             <button
               onClick={() => {

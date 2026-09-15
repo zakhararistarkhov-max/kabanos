@@ -137,7 +137,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	diarySvc := diary.NewService(diaryRepo, store)
 	pushSvc := push.NewService(pushRepo, cfg.VAPID, logger)
 	remindersSvc := reminders.NewService(remindersRepo)
-	gtdSvc := gtd.NewService(gtdRepo)
+	gtdSvc := gtd.NewService(gtdRepo, store)
 	calendarSvc, err := calendar.NewService(calendarRepo, calendar.DeriveKey(cfg.CalendarEncKey, cfg.Auth.JWTSecret), logger)
 	if err != nil {
 		return fmt.Errorf("calendar service: %w", err)

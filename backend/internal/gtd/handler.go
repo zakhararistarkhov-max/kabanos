@@ -45,6 +45,20 @@ func (h *Handler) Routes() http.Handler {
 		r.Post("/{id}/done", h.markDone)
 		r.Delete("/{id}/done", h.markUndone)
 	})
+	r.Route("/graph", func(r chi.Router) {
+		r.Get("/", h.getGraph)
+		r.Get("/boards", h.getBoards)
+		r.Get("/settings", h.getGraphSettings)
+		r.Put("/settings", h.putGraphSettings)
+		r.Post("/image-upload-url", h.graphImageUploadURL)
+		r.Post("/nodes", h.createGraphNode)
+		r.Put("/nodes/{id}", h.updateGraphNode)
+		r.Delete("/nodes/{id}", h.deleteGraphNode)
+		r.Post("/nodes/{id}/images", h.addGraphNodeImage)
+		r.Delete("/nodes/{id}/images", h.removeGraphNodeImage)
+		r.Post("/edges", h.createGraphEdge)
+		r.Delete("/edges/{id}", h.deleteGraphEdge)
+	})
 	return r
 }
 

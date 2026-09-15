@@ -413,6 +413,51 @@ export interface GtdContextCount {
   count: number;
 }
 
+export type GtdNodeKind = "task" | "project" | "note";
+export type GtdColor = "green" | "yellow" | "red";
+
+export interface GtdGraphNode {
+  id: string;
+  kind: GtdNodeKind;
+  itemId: string | null;
+  refProjectId: string | null;
+  label: string;
+  done: boolean;
+  status: string;
+  deadline: string | null;
+  color: GtdColor;
+  note: string;
+  imageKeys: string[];
+  imageUrls: string[];
+  x: number;
+  y: number;
+}
+
+export interface GtdGraphEdge {
+  id: string;
+  source: string;
+  target: string;
+}
+
+export interface GtdGraphSummary {
+  red: number;
+  yellow: number;
+  green: number;
+  color: GtdColor;
+  projectedCompletion: string | null;
+}
+
+export interface GtdBoardInfo {
+  projectId: string | null;
+  title: string;
+  summary: GtdGraphSummary;
+}
+
+export interface GtdGraphSettings {
+  soonDays: number;
+  graceDays: number;
+}
+
 export interface GtdReview {
   inboxCount: number;
   nextCount: number;

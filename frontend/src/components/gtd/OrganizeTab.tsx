@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, ChevronRight, Network, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   useCreateProject,
   useDeleteProject,
@@ -199,7 +200,10 @@ function ProjectRow({ p, onEdit, onDelete }: { p: GtdProject; onEdit: () => void
           {p.outcome ? <span> · {p.outcome}</span> : null}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-2.5">
+        <Link href={`/gtd/graph/${p.id}`} className="flex items-center gap-1 text-xs text-brand hover:text-brand-soft" title="Открыть граф проекта">
+          <Network size={14} /> Граф
+        </Link>
         <button onClick={onEdit} className="text-ink-500 hover:text-ink-100" aria-label="Изменить">
           <Pencil size={15} />
         </button>

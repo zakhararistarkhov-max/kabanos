@@ -2,14 +2,65 @@ package gtd
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/kabanos/backend/internal/storage"
 )
 
-type Service struct{ repo *Repo }
+type Service struct {
+	repo  *Repo
+	store *storage.Storage
+}
 
-func NewService(repo *Repo) *Service { return &Service{repo: repo} }
+func NewService(repo *Repo, store *storage.Storage) *Service {
+	return &Service{repo: repo, store: store}
+}
+
+// Image storage errors surfaced to the graph handler.
+var (
+	ErrUnsupportedMedia = errors.New("unsupported image type")
+	ErrStorageDisabled  = errors.New("image storage is disabled")
+)
+
+var imageExtensions = map[string]string{
+	"image/jpeg": ".jpg",
+	"image/png":  ".png",
+	"image/webp": ".webp",
+}
+
+// PrepareImageUpload returns a presigned PUT URL + key for a node photo.
+func (s *Service) PrepareImageUpload(ctx context.Context, contentType string) (uploadURL, key string, err error) {
+	if s.store == nil || !s.store.Enabled() {
+		return "", "", ErrStorageDisabled
+	}
+	ext, ok := imageExtensions[contentType]
+	if !ok {
+		return "", "", ErrUnsupportedMedia
+	}
+	key = storage.NewKey("gtd", ext)
+	uploadURL, err = s.store.PresignPut(ctx, key, contentType, 10*time.Minute)
+	return uploadURL, key, err
+}
+
+// imageURLs resolves stored image keys to short-lived GET URLs.
+func (s *Service) imageURLs(ctx context.Context, keys []string) []string {
+	out := make([]string, 0, len(keys))
+	if s.store == nil || !s.store.Enabled() {
+		return out
+	}
+	for _, k := range keys {
+		if k == "" {
+			continue
+		}
+		if u, err := s.store.PresignGet(ctx, k, time.Hour); err == nil {
+			out = append(out, u)
+		}
+	}
+	return out
+}
 
 // --- projects ---
 
