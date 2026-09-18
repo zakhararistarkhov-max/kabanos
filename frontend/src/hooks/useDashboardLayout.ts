@@ -7,7 +7,7 @@ const LEGACY_V2 = "kabanos:dashboard:layout:v2";
 const LEGACY_V1 = "kabanos:dashboard:layout:v1";
 
 // The default set and order of dashboard widgets for a new user.
-export const DEFAULT_LAYOUT = ["water", "nutrition", "weight", "pressure", "diary", "macros", "gtd", "training", "meds"];
+export const DEFAULT_LAYOUT = ["water", "nutrition", "fasting", "weight", "pressure", "diary", "macros", "gtd", "training", "meds"];
 
 export type Span = 1 | 2 | 3;
 

@@ -24,6 +24,7 @@ import (
 	"github.com/kabanos/backend/internal/calendar"
 	"github.com/kabanos/backend/internal/config"
 	"github.com/kabanos/backend/internal/diary"
+	"github.com/kabanos/backend/internal/fasting"
 	"github.com/kabanos/backend/internal/gtd"
 	"github.com/kabanos/backend/internal/httpx"
 	"github.com/kabanos/backend/internal/meds"
@@ -114,6 +115,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	workoutRepo := training.NewWorkoutRepo(db)
 	medsRepo := meds.NewRepo(db)
 	pressureRepo := pressure.NewRepo(db)
+	fastingRepo := fasting.NewRepo(db)
 	diaryRepo := diary.NewRepo(db)
 	pushRepo := push.NewRepo(db)
 	remindersRepo := reminders.NewRepo(db)
@@ -134,6 +136,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	trainingSvc := training.NewService(exerciseRepo, workoutRepo, store)
 	medsSvc := meds.NewService(medsRepo)
 	pressureSvc := pressure.NewService(pressureRepo)
+	fastingSvc := fasting.NewService(fastingRepo)
 	diarySvc := diary.NewService(diaryRepo, store)
 	pushSvc := push.NewService(pushRepo, cfg.VAPID, logger)
 	remindersSvc := reminders.NewService(remindersRepo)
@@ -151,6 +154,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	trainingH := training.NewHandler(trainingSvc)
 	medsH := meds.NewHandler(medsSvc)
 	pressureH := pressure.NewHandler(pressureSvc)
+	fastingH := fasting.NewHandler(fastingSvc)
 	diaryH := diary.NewHandler(diarySvc)
 	pushH := push.NewHandler(pushSvc)
 	remindersH := reminders.NewHandler(remindersSvc)
@@ -207,6 +211,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 			r.Mount("/training", trainingH.Routes())
 			r.Mount("/meds", medsH.Routes())
 			r.Mount("/pressure", pressureH.Routes())
+			r.Mount("/fasting", fastingH.Routes())
 			r.Mount("/diary", diaryH.Routes())
 			r.Mount("/push", pushH.Routes())
 			r.Mount("/reminders", remindersH.Routes())

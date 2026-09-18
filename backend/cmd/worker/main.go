@@ -8,18 +8,24 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	// Embed tzdata for the static runtime image (see cmd/api/main.go).
 	_ "time/tzdata"
 
+	"github.com/google/uuid"
+
 	"github.com/kabanos/backend/internal/calendar"
 	"github.com/kabanos/backend/internal/config"
+	"github.com/kabanos/backend/internal/fasting"
 	"github.com/kabanos/backend/internal/mailer"
 	"github.com/kabanos/backend/internal/notify"
 	"github.com/kabanos/backend/internal/observability"
@@ -76,6 +82,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 
 	pushSvc := push.NewService(push.NewRepo(db), cfg.VAPID, logger)
 	remRepo := reminders.NewRepo(db)
+	fastingRepo := fasting.NewRepo(db)
 	calSvc, err := calendar.NewService(calendar.NewRepo(db), calendar.DeriveKey(cfg.CalendarEncKey, cfg.Auth.JWTSecret), logger)
 	if err != nil {
 		return fmt.Errorf("calendar service: %w", err)
@@ -112,6 +119,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 			processBatch(ctx, box, d, logger)
 		case <-remTicker.C:
 			processReminders(ctx, remRepo, pushSvc, logger)
+			processFastingSchedules(ctx, fastingRepo, pushSvc, logger)
 		case <-calTicker.C:
 			calSvc.SyncAll(ctx)
 		}
@@ -174,6 +182,122 @@ func conditionMet(ctx context.Context, repo *reminders.Repo, rem reminders.Remin
 		return repo.MedsDue(ctx, rem.UserID, local.Format("2006-01-02"))
 	}
 	return true, nil
+}
+
+// fastingFireTolerance bounds how late an auto-start may fire (e.g. if the
+// worker was briefly down) before the day's slot is considered missed.
+const fastingFireTolerance = 30 * time.Minute
+
+// processFastingSchedules auto-starts scheduled fasts and pushes the start and
+// hourly-countdown notifications. It sends at most one notification per user per
+// tick; the ClaimNotify/ClaimAutoStart guards make it safe across replicas.
+func processFastingSchedules(ctx context.Context, repo *fasting.Repo, pushSvc *push.Service, logger *slog.Logger) {
+	if !pushSvc.Enabled() {
+		return
+	}
+	rows, err := repo.ListEnabledSchedules(ctx)
+	if err != nil {
+		logger.Error("list fasting schedules", slog.String("error", err.Error()))
+		return
+	}
+	now := time.Now()
+	for _, row := range rows {
+		loc, err := time.LoadLocation(row.Schedule.Timezone)
+		if err != nil {
+			loc = time.UTC
+		}
+		local := now.In(loc)
+
+		active, err := repo.GetActive(ctx, row.UserID)
+		hasActive := err == nil
+		if err != nil && !errors.Is(err, postgres.ErrNotFound) {
+			logger.Error("fasting active lookup", slog.String("error", err.Error()))
+			continue
+		}
+
+		// 1) Auto-start the fast at the scheduled local time (once per day).
+		if !hasActive && row.Schedule.AutoStart {
+			slot := time.Date(local.Year(), local.Month(), local.Day(), row.Schedule.StartHour, row.Schedule.StartMinute, 0, 0, loc)
+			today := local.Format("2006-01-02")
+			startedToday := row.AutoStartedOn != nil && row.AutoStartedOn.Format("2006-01-02") == today
+			if !startedToday && !now.Before(slot) && now.Sub(slot) <= fastingFireTolerance {
+				won, cerr := repo.ClaimAutoStart(ctx, row.UserID, today)
+				switch {
+				case cerr != nil:
+					logger.Error("claim fasting auto-start", slog.String("error", cerr.Error()))
+				case won:
+					sess, serr := repo.Create(ctx, row.UserID, slot, row.FastingHours)
+					if serr != nil {
+						// A concurrent manual start likely won the unique index — skip.
+						logger.Warn("fasting auto-start create", slog.String("error", serr.Error()))
+					} else {
+						active, hasActive = sess, true
+					}
+				}
+			}
+		}
+		if !hasActive {
+			continue
+		}
+
+		// 2) Notify: the start push, then one hourly countdown per elapsed hour.
+		start := active.StartedAt
+		goalH := int(active.GoalHours)
+		if goalH < 1 {
+			goalH = 1
+		}
+
+		// New fast (anchor changed) → reset the cursor and send the start push.
+		if row.NotifyAnchor == nil || !row.NotifyAnchor.Equal(start) {
+			won, cerr := repo.ClaimNotify(ctx, row.UserID, row.NotifyAnchor, row.NotifyLastHour, start, 0)
+			if cerr != nil {
+				logger.Error("claim fasting notify (start)", slog.String("error", cerr.Error()))
+			} else if won && row.Schedule.NotifyStart {
+				end := start.Add(time.Duration(active.GoalHours * float64(time.Hour)))
+				sendFastingPush(ctx, pushSvc, logger, row.UserID, push.Notification{
+					Title: "Голодание началось",
+					Body:  fmt.Sprintf("Цель — %s. Продержитесь до %s.", fmtHours(active.GoalHours), end.In(loc).Format("15:04")),
+					URL:   "/fasting",
+				})
+			}
+			continue
+		}
+
+		// Hourly countdown at each whole elapsed hour, up to the goal.
+		elapsed := int(now.Sub(start).Hours())
+		if row.NotifyLastHour < goalH && elapsed >= 1 && elapsed > row.NotifyLastHour {
+			target := elapsed
+			if target > goalH {
+				target = goalH
+			}
+			won, cerr := repo.ClaimNotify(ctx, row.UserID, row.NotifyAnchor, row.NotifyLastHour, start, target)
+			if cerr != nil {
+				logger.Error("claim fasting notify (hourly)", slog.String("error", cerr.Error()))
+			} else if won && row.Schedule.NotifyHourly {
+				var n push.Notification
+				if remaining := goalH - target; remaining <= 0 {
+					n = push.Notification{Title: "Цель достигнута! 🎉", Body: fmt.Sprintf("%s голодания позади. Можно открывать окно еды.", fmtHours(active.GoalHours)), URL: "/fasting"}
+				} else {
+					n = push.Notification{Title: fmt.Sprintf("Голодание: осталось %d ч", remaining), Body: fmt.Sprintf("Прошло %d ч из %d. Держитесь!", target, goalH), URL: "/fasting"}
+				}
+				sendFastingPush(ctx, pushSvc, logger, row.UserID, n)
+			}
+		}
+	}
+}
+
+func sendFastingPush(ctx context.Context, pushSvc *push.Service, logger *slog.Logger, userID uuid.UUID, n push.Notification) {
+	if _, err := pushSvc.Send(ctx, userID, n); err != nil {
+		logger.Error("send fasting push", slog.String("error", err.Error()))
+	}
+}
+
+// fmtHours renders a fasting length like "18 ч" or "18,5 ч" (Russian decimal).
+func fmtHours(h float64) string {
+	if h == math.Trunc(h) {
+		return fmt.Sprintf("%d ч", int(h))
+	}
+	return strings.Replace(fmt.Sprintf("%.1f ч", h), ".", ",", 1)
 }
 
 func processBatch(ctx context.Context, box *outbox.Repo, d *dispatcher, logger *slog.Logger) {

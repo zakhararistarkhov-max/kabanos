@@ -53,6 +53,47 @@ export interface WeightEntry {
   measuredAt: string;
 }
 
+// --- intermittent fasting ---
+
+export type FastingPhase = "fasting" | "eating" | "idle";
+
+export interface FastingStats {
+  totalFasts: number;
+  longestHours: number;
+  avgHours: number;
+}
+
+export interface FastingSchedule {
+  enabled: boolean;
+  startHour: number;
+  startMinute: number;
+  timezone: string;
+  autoStart: boolean;
+  notifyStart: boolean;
+  notifyHourly: boolean;
+}
+
+export interface FastingState {
+  phase: FastingPhase;
+  fastingHours: number;
+  eatingHours: number;
+  activeId: string | null;
+  phaseStartAt: string | null;
+  phaseEndAt: string | null;
+  goalHours: number;
+  overrun: boolean;
+  serverNow: string;
+  stats: FastingStats;
+  schedule: FastingSchedule;
+}
+
+export interface FastingSession {
+  id: string;
+  startedAt: string;
+  endedAt: string | null;
+  goalHours: number;
+}
+
 export interface WeightSummary {
   latestKg: number | null;
   targetKg: number | null;

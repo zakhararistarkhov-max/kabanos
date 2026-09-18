@@ -18,6 +18,7 @@ import {
   Pill,
   Scale,
   Settings,
+  Timer,
   Utensils,
   X,
   type LucideIcon,
@@ -43,6 +44,7 @@ const NAV_GROUPS: { label: string; items: { href: string; label: string; Icon: L
     items: [
       { href: "/water", label: "Вода", Icon: Droplet },
       { href: "/nutrition", label: "Калории", Icon: Flame },
+      { href: "/fasting", label: "Голодание", Icon: Timer },
       { href: "/weight", label: "Вес", Icon: Scale },
       { href: "/pressure", label: "Давление", Icon: HeartPulse },
       { href: "/meds", label: "Таблетки", Icon: Pill },

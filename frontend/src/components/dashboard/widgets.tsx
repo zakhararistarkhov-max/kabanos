@@ -13,6 +13,7 @@ import {
   Pill,
   Salad,
   Scale,
+  Timer,
   Utensils,
   Zap,
   type LucideIcon,
@@ -26,6 +27,8 @@ import { useWorkouts } from "@/hooks/useTraining";
 import { useMeds, useTakeIntake, useUndoIntake } from "@/hooks/useMeds";
 import { usePressureSummary } from "@/hooks/useBloodPressure";
 import { useDiaryDay } from "@/hooks/useDiary";
+import { useFasting } from "@/hooks/useFasting";
+import { FastingRing } from "@/components/FastingRing";
 import { useCaptureItem, useGtdItems, useGtdReview, useToggleDone } from "@/hooks/useGtd";
 import { DIFFICULTY_LABELS, DIFFICULTY_STYLE, label } from "@/lib/training";
 import { pressureCat } from "@/lib/pressure";
@@ -460,6 +463,30 @@ function GtdWidget() {
   );
 }
 
+function FastingWidget() {
+  const f = useFasting();
+  const s = f.data;
+  const hint = s ? (s.phase === "fasting" ? "голодание" : s.phase === "eating" ? "приём пищи" : "старт") : "";
+  return (
+    <Link href="/fasting" className="card card-interactive block h-full">
+      <div className="flex items-center justify-between">
+        <h2 className="flex items-center gap-2 font-semibold">
+          <IconBadge Icon={Timer} />
+          Голодание
+        </h2>
+        <span className="text-sm text-ink-500">{hint} →</span>
+      </div>
+      <div className="mt-3 grid place-items-center">
+        {s ? (
+          <FastingRing phase={s.phase} phaseStartAt={s.phaseStartAt} phaseEndAt={s.phaseEndAt} size={150} stroke={12} />
+        ) : (
+          <Skeleton h="h-36" />
+        )}
+      </div>
+    </Link>
+  );
+}
+
 // ---- registry ----
 
 export const WIDGETS: WidgetMeta[] = [
@@ -468,6 +495,7 @@ export const WIDGETS: WidgetMeta[] = [
   { id: "weight", title: "Вес", icon: Scale, span: 1, Component: WeightWidget },
   { id: "pressure", title: "Давление", icon: HeartPulse, span: 1, Component: PressureWidget },
   { id: "diary", title: "Дневник", icon: BookText, span: 1, Component: DiaryWidget },
+  { id: "fasting", title: "Голодание", icon: Timer, span: 1, Component: FastingWidget },
   { id: "macros", title: "Баланс БЖУ", icon: Salad, span: 1, Component: MacrosWidget },
   { id: "quick", title: "Быстрые действия", icon: Zap, span: 3, Component: QuickWidget },
   { id: "gtd", title: "GTD", icon: ListChecks, span: 2, Component: GtdWidget },
