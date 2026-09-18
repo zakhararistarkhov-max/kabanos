@@ -18,11 +18,11 @@ func NewRepo(db *postgres.DB) *Repo { return &Repo{db: db} }
 
 // ---------- projects ----------
 
-const projCols = `id, user_id, title, outcome, notes, status, created_at, updated_at, completed_at`
+const projCols = `id, user_id, title, outcome, notes, status, created_at, updated_at, completed_at, priority`
 
 func scanProject(row pgx.Row, withCounts bool) (*Project, error) {
 	var p Project
-	dst := []any{&p.ID, &p.UserID, &p.Title, &p.Outcome, &p.Notes, &p.Status, &p.CreatedAt, &p.UpdatedAt, &p.CompletedAt}
+	dst := []any{&p.ID, &p.UserID, &p.Title, &p.Outcome, &p.Notes, &p.Status, &p.CreatedAt, &p.UpdatedAt, &p.CompletedAt, &p.Priority}
 	if withCounts {
 		dst = append(dst, &p.OpenActions, &p.NextActions)
 	}
@@ -36,19 +36,33 @@ func scanProject(row pgx.Row, withCounts bool) (*Project, error) {
 }
 
 func (r *Repo) CreateProject(ctx context.Context, userID uuid.UUID, in ProjectInput) (*Project, error) {
-	const q = `INSERT INTO gtd_projects (user_id, title, outcome, notes, status)
-		VALUES ($1,$2,$3,$4,$5) RETURNING ` + projCols
-	return scanProject(r.db.Pool.QueryRow(ctx, q, userID, in.Title, in.Outcome, in.Notes, in.Status), false)
+	const q = `INSERT INTO gtd_projects (user_id, title, outcome, notes, status, priority)
+		VALUES ($1,$2,$3,$4,$5,$6) RETURNING ` + projCols
+	return scanProject(r.db.Pool.QueryRow(ctx, q, userID, in.Title, in.Outcome, in.Notes, in.Status, clampPriority(in.Priority)), false)
 }
 
 func (r *Repo) UpdateProject(ctx context.Context, id, userID uuid.UUID, in ProjectInput) (*Project, error) {
 	const q = `UPDATE gtd_projects
-		SET title=$3, outcome=$4, notes=$5, status=$6,
+		SET title=$3, outcome=$4, notes=$5, status=$6, priority=$7,
 			completed_at = CASE WHEN $6='done' AND completed_at IS NULL THEN now()
 			                    WHEN $6<>'done' THEN NULL ELSE completed_at END,
 			updated_at=now()
 		WHERE id=$1 AND user_id=$2 RETURNING ` + projCols
-	return scanProject(r.db.Pool.QueryRow(ctx, q, id, userID, in.Title, in.Outcome, in.Notes, in.Status), false)
+	return scanProject(r.db.Pool.QueryRow(ctx, q, id, userID, in.Title, in.Outcome, in.Notes, in.Status, clampPriority(in.Priority)), false)
+}
+
+// SetProjectPriority updates only a project's priority (1..5).
+func (r *Repo) SetProjectPriority(ctx context.Context, id, userID uuid.UUID, priority int) error {
+	ct, err := r.db.Pool.Exec(ctx,
+		`UPDATE gtd_projects SET priority=$3, updated_at=now() WHERE id=$1 AND user_id=$2`,
+		id, userID, clampPriority(priority))
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return postgres.ErrNotFound
+	}
+	return nil
 }
 
 func (r *Repo) DeleteProject(ctx context.Context, id, userID uuid.UUID) error {
@@ -148,7 +162,7 @@ func (r *Repo) CreateItem(ctx context.Context, userID uuid.UUID, in ItemInput) (
 		RETURNING id`
 	var id uuid.UUID
 	if err := r.db.Pool.QueryRow(ctx, q, userID, in.ProjectID, in.Title, in.Notes, in.Bucket, in.Context,
-		in.WaitingFor, in.ScheduledAt, in.EndAt, in.AllDay, in.DueOn, in.Energy, in.TimeMinutes, in.Priority).
+		in.WaitingFor, in.ScheduledAt, in.EndAt, in.AllDay, in.DueOn, in.Energy, in.TimeMinutes, clampItemPriority(in.Priority)).
 		Scan(&id); err != nil {
 		return nil, err
 	}
@@ -162,7 +176,21 @@ func (r *Repo) UpdateItem(ctx context.Context, id, userID uuid.UUID, in ItemInpu
 			priority=$15, updated_at=now()
 		WHERE id=$1 AND user_id=$2`
 	ct, err := r.db.Pool.Exec(ctx, q, id, userID, in.ProjectID, in.Title, in.Notes, in.Bucket, in.Context,
-		in.WaitingFor, in.ScheduledAt, in.EndAt, in.AllDay, in.DueOn, in.Energy, in.TimeMinutes, in.Priority)
+		in.WaitingFor, in.ScheduledAt, in.EndAt, in.AllDay, in.DueOn, in.Energy, in.TimeMinutes, clampItemPriority(in.Priority))
+	if err != nil {
+		return nil, err
+	}
+	if ct.RowsAffected() == 0 {
+		return nil, postgres.ErrNotFound
+	}
+	return r.GetItem(ctx, id, userID)
+}
+
+// SetItemPriority updates only a task's priority (0..5).
+func (r *Repo) SetItemPriority(ctx context.Context, id, userID uuid.UUID, priority int) (*Item, error) {
+	ct, err := r.db.Pool.Exec(ctx,
+		`UPDATE gtd_items SET priority=$3, updated_at=now() WHERE id=$1 AND user_id=$2`,
+		id, userID, clampItemPriority(priority))
 	if err != nil {
 		return nil, err
 	}

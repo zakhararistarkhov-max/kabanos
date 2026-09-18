@@ -8,9 +8,11 @@ import {
   useAddNodeImage,
   useDeleteNode,
   useRemoveNodeImage,
+  useSetItemPriority,
   useUpdateNode,
 } from "@/hooks/useGtdGraph";
 import type { GtdGraphNode, GtdNodeKind } from "@/lib/types";
+import { PriorityBars, priorityLabel } from "@/components/gtd/PriorityBars";
 
 const KIND_LABEL: Record<GtdNodeKind, string> = { task: "задача", project: "подпроект", note: "заметка" };
 
@@ -38,10 +40,12 @@ export function NodeEditor({
   const addImg = useAddNodeImage();
   const removeImg = useRemoveNodeImage();
   const deleteNode = useDeleteNode();
+  const setItemPriority = useSetItemPriority();
 
   const [label, setLabel] = useState(node?.label ?? "");
   const [deadline, setDeadline] = useState(node?.deadline ?? "");
   const [note, setNote] = useState(node?.note ?? "");
+  const [priority, setPriority] = useState(node?.priority ?? 0);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -53,6 +57,7 @@ export function NodeEditor({
     setLabel(node?.label ?? "");
     setDeadline(node?.deadline ?? "");
     setNote(node?.note ?? "");
+    setPriority(node?.priority ?? 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node?.id]);
 
@@ -147,6 +152,23 @@ export function NodeEditor({
           <label className="label">Дедлайн (необязательно)</label>
           <input type="date" className="input" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
         </div>
+
+        {editing && node!.kind === "task" && node!.itemId ? (
+          <div>
+            <label className="label">Приоритет</label>
+            <div className="flex items-center gap-3">
+              <PriorityBars
+                value={priority}
+                allowZero
+                onChange={(p) => {
+                  setPriority(p);
+                  setItemPriority.mutate({ id: node!.itemId!, priority: p }, { onSuccess: onChanged });
+                }}
+              />
+              <span className="text-sm text-ink-400">{priorityLabel(priority)}</span>
+            </div>
+          </div>
+        ) : null}
 
         <div>
           <label className="label">Заметка</label>

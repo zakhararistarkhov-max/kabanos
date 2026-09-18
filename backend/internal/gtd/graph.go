@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,6 +34,7 @@ type GraphNode struct {
 	Note         string
 	ImageKeys    []string
 	ImageURLs    []string // computed (presigned)
+	Priority     int      // underlying task priority (0..5); 0 for non-task nodes
 	X            float64
 	Y            float64
 }
@@ -59,7 +61,24 @@ type Summary struct {
 type BoardInfo struct {
 	ProjectID *uuid.UUID
 	Title     string
+	Priority  int // graph priority (1..5); 0 for the aggregate root board
 	Summary   Summary
+}
+
+// FeedTask is one card in the "to-do feed" — an open task node somewhere in the
+// user's graphs, enriched with its board and colour for urgency ordering.
+type FeedTask struct {
+	NodeID        uuid.UUID
+	ItemID        *uuid.UUID
+	Label         string
+	Note          string
+	Color         string
+	Deadline      *string
+	ImageURLs     []string
+	BoardID       *uuid.UUID
+	BoardTitle    string
+	GraphPriority int
+	Priority      int // task (item) priority, 0..5
 }
 
 type GraphEdge struct {
@@ -73,7 +92,8 @@ type GraphEdge struct {
 const graphNodeSelect = `
 	SELECT n.id, n.kind, n.item_id, n.ref_project_id,
 		COALESCE(NULLIF(n.label,''), i.title, p.title, ''),
-		COALESCE(i.done, false), COALESCE(p.status, ''), to_char(n.deadline,'YYYY-MM-DD'), n.note, n.image_keys, n.x, n.y
+		COALESCE(i.done, false), COALESCE(p.status, ''), to_char(n.deadline,'YYYY-MM-DD'), n.note, n.image_keys,
+		COALESCE(i.priority, 0), n.x, n.y
 	FROM gtd_graph_nodes n
 	LEFT JOIN gtd_items i ON i.id = n.item_id
 	LEFT JOIN gtd_projects p ON p.id = n.ref_project_id`
@@ -88,7 +108,7 @@ func (r *Repo) ListGraph(ctx context.Context, userID uuid.UUID, board *uuid.UUID
 	nodes := []GraphNode{}
 	for nrows.Next() {
 		var n GraphNode
-		if err := nrows.Scan(&n.ID, &n.Kind, &n.ItemID, &n.RefProjectID, &n.Label, &n.Done, &n.Status, &n.Deadline, &n.Note, &n.ImageKeys, &n.X, &n.Y); err != nil {
+		if err := nrows.Scan(&n.ID, &n.Kind, &n.ItemID, &n.RefProjectID, &n.Label, &n.Done, &n.Status, &n.Deadline, &n.Note, &n.ImageKeys, &n.Priority, &n.X, &n.Y); err != nil {
 			nrows.Close()
 			return nil, nil, err
 		}
@@ -120,7 +140,7 @@ func (r *Repo) ListGraph(ctx context.Context, userID uuid.UUID, board *uuid.UUID
 func (r *Repo) GetGraphNode(ctx context.Context, userID, id uuid.UUID) (*GraphNode, error) {
 	var n GraphNode
 	err := r.db.Read().QueryRow(ctx, graphNodeSelect+` WHERE n.id=$1 AND n.user_id=$2`, id, userID).
-		Scan(&n.ID, &n.Kind, &n.ItemID, &n.RefProjectID, &n.Label, &n.Done, &n.Status, &n.Deadline, &n.Note, &n.ImageKeys, &n.X, &n.Y)
+		Scan(&n.ID, &n.Kind, &n.ItemID, &n.RefProjectID, &n.Label, &n.Done, &n.Status, &n.Deadline, &n.Note, &n.ImageKeys, &n.Priority, &n.X, &n.Y)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, postgres.ErrNotFound
@@ -361,11 +381,22 @@ func dayDiff(now, deadline time.Time) int {
 }
 
 func worst(a, b string) string {
-	rank := map[string]int{"green": 1, "yellow": 2, "red": 3}
-	if rank[b] > rank[a] {
+	if colorRank(b) > colorRank(a) {
 		return b
 	}
 	return a
+}
+
+// colorRank orders colours by urgency: red highest, green lowest.
+func colorRank(c string) int {
+	switch c {
+	case "red":
+		return 3
+	case "yellow":
+		return 2
+	default:
+		return 1
+	}
 }
 
 func maxDate(cur *string, cand *string) *string {
@@ -430,25 +461,27 @@ func (s *Service) RemoveNodeImage(ctx context.Context, userID, id uuid.UUID, key
 	return s.repo.RemoveGraphNodeImage(ctx, userID, id, key)
 }
 
-// Boards returns every graph (root + each project) with its colour summary.
+// Boards returns every graph (root + each project) with its colour summary and
+// priority. The root aggregate stays pinned first; project graphs follow sorted
+// by urgency (red → yellow → green) and, within a colour band, by priority.
 func (s *Service) Boards(ctx context.Context, userID uuid.UUID) ([]BoardInfo, error) {
 	st, err := s.repo.GetSettings(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now()
-	out := []BoardInfo{}
 
 	_, _, rootSum, err := s.BoardView(ctx, userID, nil, st, now, map[uuid.UUID]bool{})
 	if err != nil {
 		return nil, err
 	}
-	out = append(out, BoardInfo{ProjectID: nil, Title: "Все проекты", Summary: rootSum})
+	root := BoardInfo{ProjectID: nil, Title: "Все проекты", Priority: 0, Summary: rootSum}
 
 	projects, err := s.repo.ListProjects(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
+	boards := make([]BoardInfo, 0, len(projects))
 	for i := range projects {
 		p := projects[i]
 		_, _, sum, err := s.BoardView(ctx, userID, &p.ID, st, now, map[uuid.UUID]bool{p.ID: true})
@@ -456,9 +489,93 @@ func (s *Service) Boards(ctx context.Context, userID uuid.UUID) ([]BoardInfo, er
 			return nil, err
 		}
 		pid := p.ID
-		out = append(out, BoardInfo{ProjectID: &pid, Title: p.Title, Summary: sum})
+		boards = append(boards, BoardInfo{ProjectID: &pid, Title: p.Title, Priority: p.Priority, Summary: sum})
 	}
+	sort.SliceStable(boards, func(a, b int) bool {
+		ra, rb := colorRank(boards[a].Summary.Color), colorRank(boards[b].Summary.Color)
+		if ra != rb {
+			return ra > rb // red first
+		}
+		if boards[a].Priority != boards[b].Priority {
+			return boards[a].Priority > boards[b].Priority // higher priority first
+		}
+		return boards[a].Title < boards[b].Title
+	})
+
+	return append([]BoardInfo{root}, boards...), nil
+}
+
+// Feed collects every open task node across all of the user's boards, coloured
+// by its deadline and ordered by urgency (red → yellow → green) then priority —
+// the backing list for the "to-do feed".
+func (s *Service) Feed(ctx context.Context, userID uuid.UUID) ([]FeedTask, error) {
+	st, err := s.repo.GetSettings(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	out := []FeedTask{}
+
+	collect := func(board *uuid.UUID, title string, graphPriority int) error {
+		visited := map[uuid.UUID]bool{}
+		if board != nil {
+			visited[*board] = true
+		}
+		nodes, _, _, err := s.BoardView(ctx, userID, board, st, now, visited)
+		if err != nil {
+			return err
+		}
+		for i := range nodes {
+			n := nodes[i]
+			if n.Kind != "task" || n.Done {
+				continue
+			}
+			out = append(out, FeedTask{
+				NodeID: n.ID, ItemID: n.ItemID, Label: n.Label, Note: n.Note, Color: n.Color,
+				Deadline: n.Deadline, ImageURLs: n.ImageURLs, BoardID: board, BoardTitle: title,
+				GraphPriority: graphPriority, Priority: n.Priority,
+			})
+		}
+		return nil
+	}
+
+	if err := collect(nil, "Все проекты", 0); err != nil {
+		return nil, err
+	}
+	projects, err := s.repo.ListProjects(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range projects {
+		p := projects[i]
+		pid := p.ID
+		if err := collect(&pid, p.Title, p.Priority); err != nil {
+			return nil, err
+		}
+	}
+
+	sort.SliceStable(out, func(a, b int) bool {
+		ra, rb := colorRank(out[a].Color), colorRank(out[b].Color)
+		if ra != rb {
+			return ra > rb
+		}
+		if out[a].Priority != out[b].Priority {
+			return out[a].Priority > out[b].Priority
+		}
+		return deadlineLess(out[a].Deadline, out[b].Deadline)
+	})
 	return out, nil
+}
+
+// deadlineLess orders by soonest deadline; a missing deadline sorts last.
+func deadlineLess(a, b *string) bool {
+	if a == nil || *a == "" {
+		return false
+	}
+	if b == nil || *b == "" {
+		return true
+	}
+	return *a < *b
 }
 
 var errBadKind = errors.New("invalid node kind")
@@ -497,6 +614,7 @@ type graphNodeDTO struct {
 	Note         string   `json:"note"`
 	ImageKeys    []string `json:"imageKeys"`
 	ImageURLs    []string `json:"imageUrls"`
+	Priority     int      `json:"priority"`
 	X            float64  `json:"x"`
 	Y            float64  `json:"y"`
 }
@@ -532,7 +650,7 @@ func toGraphNodeDTO(n GraphNode) graphNodeDTO {
 	if keys == nil {
 		keys = []string{}
 	}
-	d := graphNodeDTO{ID: n.ID.String(), Kind: n.Kind, Label: n.Label, Done: n.Done, Status: n.Status, Deadline: n.Deadline, Color: color, Note: n.Note, ImageKeys: keys, ImageURLs: urls, X: n.X, Y: n.Y}
+	d := graphNodeDTO{ID: n.ID.String(), Kind: n.Kind, Label: n.Label, Done: n.Done, Status: n.Status, Deadline: n.Deadline, Color: color, Note: n.Note, ImageKeys: keys, ImageURLs: urls, Priority: n.Priority, X: n.X, Y: n.Y}
 	if n.ItemID != nil {
 		s := n.ItemID.String()
 		d.ItemID = &s
@@ -591,6 +709,7 @@ func (h *Handler) getGraph(w http.ResponseWriter, r *http.Request) {
 type boardInfoDTO struct {
 	ProjectID *string    `json:"projectId"`
 	Title     string     `json:"title"`
+	Priority  int        `json:"priority"`
 	Summary   summaryDTO `json:"summary"`
 }
 
@@ -607,7 +726,50 @@ func (h *Handler) getBoards(w http.ResponseWriter, r *http.Request) {
 			s := b.ProjectID.String()
 			pid = &s
 		}
-		out = append(out, boardInfoDTO{ProjectID: pid, Title: b.Title, Summary: toSummaryDTO(b.Summary)})
+		out = append(out, boardInfoDTO{ProjectID: pid, Title: b.Title, Priority: b.Priority, Summary: toSummaryDTO(b.Summary)})
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+type feedTaskDTO struct {
+	NodeID        string   `json:"nodeId"`
+	ItemID        *string  `json:"itemId"`
+	Label         string   `json:"label"`
+	Note          string   `json:"note"`
+	Color         string   `json:"color"`
+	Deadline      *string  `json:"deadline"`
+	ImageURLs     []string `json:"imageUrls"`
+	BoardID       *string  `json:"boardId"`
+	BoardTitle    string   `json:"boardTitle"`
+	GraphPriority int      `json:"graphPriority"`
+	Priority      int      `json:"priority"`
+}
+
+func (h *Handler) getGraphFeed(w http.ResponseWriter, r *http.Request) {
+	tasks, err := h.svc.Feed(r.Context(), auth.UserID(r.Context()))
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	out := make([]feedTaskDTO, 0, len(tasks))
+	for _, t := range tasks {
+		urls := t.ImageURLs
+		if urls == nil {
+			urls = []string{}
+		}
+		d := feedTaskDTO{
+			NodeID: t.NodeID.String(), Label: t.Label, Note: t.Note, Color: t.Color, Deadline: t.Deadline,
+			ImageURLs: urls, BoardTitle: t.BoardTitle, GraphPriority: t.GraphPriority, Priority: t.Priority,
+		}
+		if t.ItemID != nil {
+			s := t.ItemID.String()
+			d.ItemID = &s
+		}
+		if t.BoardID != nil {
+			s := t.BoardID.String()
+			d.BoardID = &s
+		}
+		out = append(out, d)
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
 }

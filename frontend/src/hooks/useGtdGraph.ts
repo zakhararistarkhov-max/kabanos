@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { GtdBoardInfo, GtdGraphEdge, GtdGraphNode, GtdGraphSettings, GtdGraphSummary, GtdNodeKind } from "@/lib/types";
+import type { GtdBoardInfo, GtdFeedTask, GtdGraphEdge, GtdGraphNode, GtdGraphSettings, GtdGraphSummary, GtdItem, GtdNodeKind } from "@/lib/types";
 
 // board is the project id whose canvas we're viewing, or "" for the root board.
 export function useGraph(board: string) {
@@ -18,6 +18,33 @@ export function useBoards() {
   return useQuery<{ items: GtdBoardInfo[] }>({
     queryKey: ["gtd", "graph", "boards"],
     queryFn: () => api("/gtd/graph/boards"),
+  });
+}
+
+// useGtdFeed returns the ordered "to-do feed": open task nodes across all graphs,
+// red first, then yellow/green, and by priority within a colour band.
+export function useGtdFeed() {
+  return useQuery<{ items: GtdFeedTask[] }>({
+    queryKey: ["gtd", "graph", "feed"],
+    queryFn: () => api("/gtd/graph/feed"),
+  });
+}
+
+export function useSetProjectPriority() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, priority }: { id: string; priority: number }) =>
+      api(`/gtd/projects/${id}/priority`, { method: "PUT", body: JSON.stringify({ priority }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["gtd"] }),
+  });
+}
+
+export function useSetItemPriority() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, priority }: { id: string; priority: number }) =>
+      api<GtdItem>(`/gtd/items/${id}/priority`, { method: "PUT", body: JSON.stringify({ priority }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["gtd"] }),
   });
 }
 

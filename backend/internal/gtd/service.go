@@ -76,6 +76,9 @@ func (s *Service) DeleteProject(ctx context.Context, id, userID uuid.UUID) error
 func (s *Service) ListProjects(ctx context.Context, userID uuid.UUID) ([]Project, error) {
 	return s.repo.ListProjects(ctx, userID)
 }
+func (s *Service) SetProjectPriority(ctx context.Context, id, userID uuid.UUID, priority int) error {
+	return s.repo.SetProjectPriority(ctx, id, userID, priority)
+}
 
 // --- items ---
 
@@ -90,6 +93,9 @@ func (s *Service) DeleteItem(ctx context.Context, id, userID uuid.UUID) error {
 }
 func (s *Service) SetDone(ctx context.Context, id, userID uuid.UUID, done bool) (*Item, error) {
 	return s.repo.SetDone(ctx, id, userID, done)
+}
+func (s *Service) SetItemPriority(ctx context.Context, id, userID uuid.UUID, priority int) (*Item, error) {
+	return s.repo.SetItemPriority(ctx, id, userID, priority)
 }
 func (s *Service) ListItems(ctx context.Context, userID uuid.UUID, f ItemFilter) ([]Item, error) {
 	return s.repo.ListItems(ctx, userID, f)

@@ -35,12 +35,14 @@ func (h *Handler) Routes() http.Handler {
 		r.Get("/", h.listProjects)
 		r.Post("/", h.createProject)
 		r.Put("/{id}", h.updateProject)
+		r.Put("/{id}/priority", h.setProjectPriority)
 		r.Delete("/{id}", h.deleteProject)
 	})
 	r.Route("/items", func(r chi.Router) {
 		r.Get("/", h.listItems)
 		r.Post("/", h.createItem)
 		r.Put("/{id}", h.updateItem)
+		r.Put("/{id}/priority", h.setItemPriority)
 		r.Delete("/{id}", h.deleteItem)
 		r.Post("/{id}/done", h.markDone)
 		r.Delete("/{id}/done", h.markUndone)
@@ -48,6 +50,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Route("/graph", func(r chi.Router) {
 		r.Get("/", h.getGraph)
 		r.Get("/boards", h.getBoards)
+		r.Get("/feed", h.getGraphFeed)
 		r.Get("/settings", h.getGraphSettings)
 		r.Put("/settings", h.putGraphSettings)
 		r.Post("/image-upload-url", h.graphImageUploadURL)
@@ -70,6 +73,7 @@ type projectDTO struct {
 	Outcome     string     `json:"outcome"`
 	Notes       string     `json:"notes"`
 	Status      string     `json:"status"`
+	Priority    int        `json:"priority"`
 	OpenActions int        `json:"openActions"`
 	NextActions int        `json:"nextActions"`
 	CreatedAt   time.Time  `json:"createdAt"`
@@ -78,7 +82,7 @@ type projectDTO struct {
 
 func toProjectDTO(p Project) projectDTO {
 	return projectDTO{
-		ID: p.ID.String(), Title: p.Title, Outcome: p.Outcome, Notes: p.Notes, Status: p.Status,
+		ID: p.ID.String(), Title: p.Title, Outcome: p.Outcome, Notes: p.Notes, Status: p.Status, Priority: p.Priority,
 		OpenActions: p.OpenActions, NextActions: p.NextActions, CreatedAt: p.CreatedAt, CompletedAt: p.CompletedAt,
 	}
 }
@@ -129,10 +133,11 @@ func itemDTOs(items []Item) []itemDTO {
 // ---------- projects ----------
 
 type projectRequest struct {
-	Title   string `json:"title"`
-	Outcome string `json:"outcome"`
-	Notes   string `json:"notes"`
-	Status  string `json:"status"`
+	Title    string `json:"title"`
+	Outcome  string `json:"outcome"`
+	Notes    string `json:"notes"`
+	Status   string `json:"status"`
+	Priority int    `json:"priority"`
 }
 
 func (req *projectRequest) toInput() (ProjectInput, *httpx.APIError) {
@@ -146,10 +151,15 @@ func (req *projectRequest) toInput() (ProjectInput, *httpx.APIError) {
 		status = "active"
 	}
 	v.Check(validStatuses[status], "status", "invalid status")
+	priority := req.Priority
+	if priority == 0 {
+		priority = 3 // default: medium
+	}
+	v.Check(priority >= 1 && priority <= 5, "priority", "must be 1..5")
 	if !v.Valid() {
 		return ProjectInput{}, httpx.ValidationError(v.Errors)
 	}
-	return ProjectInput{Title: req.Title, Outcome: req.Outcome, Notes: req.Notes, Status: status}, nil
+	return ProjectInput{Title: req.Title, Outcome: req.Outcome, Notes: req.Notes, Status: status, Priority: priority}, nil
 }
 
 func (h *Handler) listProjects(w http.ResponseWriter, r *http.Request) {
@@ -207,6 +217,57 @@ func (h *Handler) updateProject(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, toProjectDTO(*p))
 }
 
+type priorityRequest struct {
+	Priority int `json:"priority"`
+}
+
+func (h *Handler) setProjectPriority(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r)
+	if !ok {
+		return
+	}
+	var req priorityRequest
+	if err := httpx.Decode(r, &req); err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	v := validate.New()
+	v.Check(req.Priority >= 1 && req.Priority <= 5, "priority", "must be 1..5")
+	if !v.Valid() {
+		httpx.Error(w, r, httpx.ValidationError(v.Errors))
+		return
+	}
+	if err := h.svc.SetProjectPriority(r.Context(), id, auth.UserID(r.Context()), req.Priority); err != nil {
+		renderErr(w, r, err, "project not found")
+		return
+	}
+	httpx.JSON(w, http.StatusNoContent, nil)
+}
+
+func (h *Handler) setItemPriority(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r)
+	if !ok {
+		return
+	}
+	var req priorityRequest
+	if err := httpx.Decode(r, &req); err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	v := validate.New()
+	v.Check(req.Priority >= 0 && req.Priority <= 5, "priority", "must be 0..5")
+	if !v.Valid() {
+		httpx.Error(w, r, httpx.ValidationError(v.Errors))
+		return
+	}
+	it, err := h.svc.SetItemPriority(r.Context(), id, auth.UserID(r.Context()), req.Priority)
+	if err != nil {
+		renderErr(w, r, err, "item not found")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toItemDTO(*it))
+}
+
 func (h *Handler) deleteProject(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseID(w, r)
 	if !ok {
@@ -251,7 +312,7 @@ func (req *itemRequest) toInput() (ItemInput, *httpx.APIError) {
 	}
 	v.Check(validBuckets[bucket], "bucket", "invalid bucket")
 	v.Check(validEnergy[req.Energy], "energy", "invalid energy")
-	v.Check(req.Priority >= 0 && req.Priority <= 3, "priority", "must be 0..3")
+	v.Check(req.Priority >= 0 && req.Priority <= 5, "priority", "must be 0..5")
 	if req.TimeMinutes != nil {
 		v.Check(*req.TimeMinutes > 0 && *req.TimeMinutes <= 100000, "timeMinutes", "must be > 0")
 	}

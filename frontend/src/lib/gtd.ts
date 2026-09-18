@@ -37,12 +37,16 @@ export const ENERGY_LABELS: Record<GtdEnergy, string> = {
   high: "высокая",
 };
 
+// Five priority levels (5 = highest); 0 means "no priority set".
 export const PRIORITY_LABELS: Record<number, string> = {
-  0: "обычный",
-  1: "заметный",
-  2: "важный",
-  3: "срочный",
+  0: "без приоритета",
+  1: "очень низкий",
+  2: "низкий",
+  3: "средний",
+  4: "высокий",
+  5: "критичный",
 };
+export const PRIORITY_LEVELS = [0, 1, 2, 3, 4, 5];
 
 // Colour classes for the priority flag (0 = none).
 export const PRIORITY_CLASS: Record<number, string> = {

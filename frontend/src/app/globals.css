@@ -99,6 +99,14 @@ body {
   .field-error {
     @apply mt-1 text-sm text-bad;
   }
+  /* Hide the scrollbar (used by the full-height task feed / reel). */
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* Water surface animation for the hydration container. */

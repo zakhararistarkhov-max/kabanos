@@ -422,6 +422,7 @@ export interface GtdProject {
   outcome: string;
   notes: string;
   status: GtdProjectStatus;
+  priority: number;
   openActions: number;
   nextActions: number;
   createdAt: string;
@@ -470,6 +471,7 @@ export interface GtdGraphNode {
   note: string;
   imageKeys: string[];
   imageUrls: string[];
+  priority: number;
   x: number;
   y: number;
 }
@@ -491,7 +493,22 @@ export interface GtdGraphSummary {
 export interface GtdBoardInfo {
   projectId: string | null;
   title: string;
+  priority: number;
   summary: GtdGraphSummary;
+}
+
+export interface GtdFeedTask {
+  nodeId: string;
+  itemId: string | null;
+  label: string;
+  note: string;
+  color: GtdColor;
+  deadline: string | null;
+  imageUrls: string[];
+  boardId: string | null;
+  boardTitle: string;
+  graphPriority: number;
+  priority: number;
 }
 
 export interface GtdGraphSettings {

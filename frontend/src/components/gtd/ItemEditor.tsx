@@ -176,9 +176,9 @@ export function ItemEditor({
           <div>
             <label className="label">Приоритет</label>
             <select className="input" value={f.priority ?? 0} onChange={(e) => set("priority", Number(e.target.value))}>
-              {[0, 1, 2, 3].map((p) => (
+              {[0, 1, 2, 3, 4, 5].map((p) => (
                 <option key={p} value={p}>
-                  {PRIORITY_LABELS[p]}
+                  {p === 0 ? PRIORITY_LABELS[0] : `${p} — ${PRIORITY_LABELS[p]}`}
                 </option>
               ))}
             </select>

@@ -19,6 +19,7 @@ type Project struct {
 	Outcome     string
 	Notes       string
 	Status      string // active | someday | done | dropped
+	Priority    int    // 1..5 (5 = highest); orders the graph panel within a colour band
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	CompletedAt *time.Time
@@ -54,10 +55,30 @@ type Item struct {
 
 // ProjectInput carries the mutable fields for create/update of a project.
 type ProjectInput struct {
-	Title   string
-	Outcome string
-	Notes   string
-	Status  string
+	Title    string
+	Outcome  string
+	Notes    string
+	Status   string
+	Priority int // 1..5
+}
+
+// clampPriority normalises a priority into 1..5 (invalid/unset → 3, medium).
+func clampPriority(p int) int {
+	if p < 1 || p > 5 {
+		return 3
+	}
+	return p
+}
+
+// clampItemPriority normalises a task priority into 0..5 (0 = unset).
+func clampItemPriority(p int) int {
+	if p < 0 {
+		return 0
+	}
+	if p > 5 {
+		return 5
+	}
+	return p
 }
 
 // ItemInput carries the mutable fields for create/update of an item.
