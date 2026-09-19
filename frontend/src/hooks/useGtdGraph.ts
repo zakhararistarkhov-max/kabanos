@@ -67,6 +67,7 @@ export interface AddNodeInput {
   project: string;
   kind: GtdNodeKind;
   title: string;
+  itemId?: string; // link an existing captured task instead of creating one
   deadline?: string;
   x: number;
   y: number;

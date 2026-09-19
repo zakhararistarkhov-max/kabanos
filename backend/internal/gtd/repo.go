@@ -200,6 +200,31 @@ func (r *Repo) SetItemPriority(ctx context.Context, id, userID uuid.UUID, priori
 	return r.GetItem(ctx, id, userID)
 }
 
+// One-field item updaters used when editing a task through its graph node, so
+// the task stays a single entity (no duplicated title/notes/deadline on nodes).
+func (r *Repo) execItem(ctx context.Context, q string, args ...any) error {
+	ct, err := r.db.Pool.Exec(ctx, q, args...)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return postgres.ErrNotFound
+	}
+	return nil
+}
+
+func (r *Repo) SetItemTitle(ctx context.Context, id, userID uuid.UUID, title string) error {
+	return r.execItem(ctx, `UPDATE gtd_items SET title=$3, updated_at=now() WHERE id=$1 AND user_id=$2`, id, userID, title)
+}
+
+func (r *Repo) SetItemNotes(ctx context.Context, id, userID uuid.UUID, notes string) error {
+	return r.execItem(ctx, `UPDATE gtd_items SET notes=$3, updated_at=now() WHERE id=$1 AND user_id=$2`, id, userID, notes)
+}
+
+func (r *Repo) SetItemDueOn(ctx context.Context, id, userID uuid.UUID, dueOn *string) error {
+	return r.execItem(ctx, `UPDATE gtd_items SET due_on=$3::date, updated_at=now() WHERE id=$1 AND user_id=$2`, id, userID, dueOn)
+}
+
 func (r *Repo) SetDone(ctx context.Context, id, userID uuid.UUID, done bool) (*Item, error) {
 	const q = `UPDATE gtd_items
 		SET done=$3, completed_at = CASE WHEN $3 THEN now() ELSE NULL END, updated_at=now()

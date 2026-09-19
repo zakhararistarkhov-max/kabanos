@@ -21,15 +21,17 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { CalendarClock, ListChecks, Plus, StickyNote } from "lucide-react";
+import { CalendarClock, Inbox, ListChecks, Plus, StickyNote } from "lucide-react";
 import {
   useAddEdge,
+  useAddNode,
   useDeleteEdge,
   useDeleteNode,
   useGraph,
   useMoveNode,
 } from "@/hooks/useGtdGraph";
 import { NodeEditor } from "@/components/gtd/NodeEditor";
+import { ExistingTaskPicker } from "@/components/gtd/ExistingTaskPicker";
 import type { GtdColor, GtdGraphNode, GtdGraphSummary, GtdNodeKind } from "@/lib/types";
 
 interface NodeData extends Record<string, unknown> {
@@ -127,12 +129,19 @@ function Inner({ board, title }: { board: string; title: string }) {
   const deleteNode = useDeleteNode();
   const addEdgeMut = useAddEdge();
   const deleteEdgeMut = useDeleteEdge();
+  const addNode = useAddNode();
   const rf = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [summary, setSummary] = useState<GtdGraphSummary | null>(null);
   const [editor, setEditor] = useState<EditorState>(null);
+  const [picking, setPicking] = useState(false);
+
+  const boardItemIds = useMemo(
+    () => new Set((graph.data?.nodes ?? []).map((n) => n.itemId).filter((x): x is string => Boolean(x))),
+    [graph.data],
+  );
 
   const refresh = useCallback(() => {
     qc.invalidateQueries({ queryKey: ["gtd", "graph", board || "root"] });
@@ -178,6 +187,9 @@ function Inner({ board, title }: { board: string; title: string }) {
         <div className="flex flex-wrap gap-2">
           <button onClick={() => setEditor({ mode: "new", kind: "task" })} className="btn-ghost">
             <Plus size={15} /> Задача
+          </button>
+          <button onClick={() => setPicking(true)} className="btn-ghost">
+            <Inbox size={15} /> Из инбокса
           </button>
           <button onClick={() => setEditor({ mode: "new", kind: "project" })} className="btn-ghost">
             <Plus size={15} /> Подпроект
@@ -226,6 +238,30 @@ function Inner({ board, title }: { board: string; title: string }) {
           onClose={() => setEditor(null)}
           onCreated={(id) => setEditor({ mode: "edit", nodeId: id })}
           onChanged={refresh}
+        />
+      ) : null}
+
+      {picking ? (
+        <ExistingTaskPicker
+          existingItemIds={boardItemIds}
+          busy={addNode.isPending}
+          onClose={() => setPicking(false)}
+          onPick={async (itemId) => {
+            try {
+              await addNode.mutateAsync({
+                project: board,
+                kind: "task",
+                title: "",
+                itemId,
+                x: 120 + Math.random() * 240,
+                y: 120 + Math.random() * 160,
+              });
+              refresh();
+              setPicking(false);
+            } catch {
+              /* ignore */
+            }
+          }}
         />
       ) : null}
 

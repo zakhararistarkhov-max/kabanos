@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -89,11 +90,18 @@ type GraphEdge struct {
 
 // ---------- repo ----------
 
+// A task node mirrors its gtd_item (title/note/deadline live on the item, not the
+// node); a project node shows the project title; a free-form note node keeps its
+// own label/note/deadline. This keeps a task a single entity across the app.
 const graphNodeSelect = `
 	SELECT n.id, n.kind, n.item_id, n.ref_project_id,
-		COALESCE(NULLIF(n.label,''), i.title, p.title, ''),
-		COALESCE(i.done, false), COALESCE(p.status, ''), to_char(n.deadline,'YYYY-MM-DD'), n.note, n.image_keys,
-		COALESCE(i.priority, 0), n.x, n.y
+		CASE WHEN n.kind='task' THEN COALESCE(i.title,'')
+		     WHEN n.kind='project' THEN COALESCE(p.title,'')
+		     ELSE n.label END,
+		COALESCE(i.done, false), COALESCE(p.status, ''),
+		to_char(CASE WHEN n.kind='task' THEN i.due_on ELSE n.deadline END, 'YYYY-MM-DD'),
+		CASE WHEN n.kind='task' THEN COALESCE(i.notes,'') ELSE n.note END,
+		n.image_keys, COALESCE(i.priority, 0), n.x, n.y
 	FROM gtd_graph_nodes n
 	LEFT JOIN gtd_items i ON i.id = n.item_id
 	LEFT JOIN gtd_projects p ON p.id = n.ref_project_id`
@@ -298,12 +306,14 @@ func (r *Repo) DeleteGraphEdge(ctx context.Context, userID, id uuid.UUID) error 
 func (s *Service) AddGraphNode(ctx context.Context, userID uuid.UUID, board *uuid.UUID, kind, title string, existingItem, existingProject *uuid.UUID, deadline *string, x, y float64) (*GraphNode, error) {
 	var itemID, refProject *uuid.UUID
 	label := ""
+	nodeDeadline := deadline // only free-form note nodes store a deadline on the node
 	switch kind {
 	case "task":
+		nodeDeadline = nil // a task's deadline lives on the item (due_on)
 		if existingItem != nil {
-			itemID = existingItem
+			itemID = existingItem // placing an already-captured task on the map
 		} else {
-			it, err := s.repo.CreateItem(ctx, userID, ItemInput{Title: title, Bucket: "next", ProjectID: board})
+			it, err := s.repo.CreateItem(ctx, userID, ItemInput{Title: title, Bucket: "next", ProjectID: board, DueOn: deadline})
 			if err != nil {
 				return nil, err
 			}
@@ -324,7 +334,7 @@ func (s *Service) AddGraphNode(ctx context.Context, userID uuid.UUID, board *uui
 	default:
 		return nil, errBadKind
 	}
-	id, err := s.repo.CreateGraphNode(ctx, userID, board, kind, itemID, refProject, label, deadline, x, y)
+	id, err := s.repo.CreateGraphNode(ctx, userID, board, kind, itemID, refProject, label, nodeDeadline, x, y)
 	if err != nil {
 		return nil, err
 	}
@@ -337,7 +347,16 @@ func (s *Service) AddGraphNode(ctx context.Context, userID uuid.UUID, board *uui
 	return n, nil
 }
 
+// SetNodeDeadline routes to the task's item (due_on) for task nodes, so a task
+// keeps a single deadline; free-form note nodes keep their own on the node.
 func (s *Service) SetNodeDeadline(ctx context.Context, userID, id uuid.UUID, deadline *string) error {
+	n, err := s.repo.GetGraphNode(ctx, userID, id)
+	if err != nil {
+		return err
+	}
+	if n.Kind == "task" && n.ItemID != nil {
+		return s.repo.SetItemDueOn(ctx, *n.ItemID, userID, deadline)
+	}
 	return s.repo.SetGraphNodeDeadline(ctx, userID, id, deadline)
 }
 func (s *Service) GetSettings(ctx context.Context, userID uuid.UUID) (Settings, error) {
@@ -452,6 +471,13 @@ func (s *Service) BoardView(ctx context.Context, userID uuid.UUID, board *uuid.U
 }
 
 func (s *Service) SetNodeNote(ctx context.Context, userID, id uuid.UUID, note string) error {
+	n, err := s.repo.GetGraphNode(ctx, userID, id)
+	if err != nil {
+		return err
+	}
+	if n.Kind == "task" && n.ItemID != nil {
+		return s.repo.SetItemNotes(ctx, *n.ItemID, userID, note)
+	}
 	return s.repo.SetGraphNodeNote(ctx, userID, id, note)
 }
 func (s *Service) AddNodeImage(ctx context.Context, userID, id uuid.UUID, key string) error {
@@ -587,6 +613,16 @@ func (s *Service) MoveNode(ctx context.Context, userID, id uuid.UUID, x, y float
 	return s.repo.MoveGraphNode(ctx, userID, id, x, y)
 }
 func (s *Service) RelabelNode(ctx context.Context, userID, id uuid.UUID, label string) error {
+	n, err := s.repo.GetGraphNode(ctx, userID, id)
+	if err != nil {
+		return err
+	}
+	if n.Kind == "task" && n.ItemID != nil {
+		if strings.TrimSpace(label) == "" {
+			return nil // a task must keep a title; ignore an empty rename
+		}
+		return s.repo.SetItemTitle(ctx, *n.ItemID, userID, label)
+	}
 	return s.repo.SetGraphNodeLabel(ctx, userID, id, label)
 }
 func (s *Service) DeleteNode(ctx context.Context, userID, id uuid.UUID) error {
