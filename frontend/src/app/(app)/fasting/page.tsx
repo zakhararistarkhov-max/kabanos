@@ -51,7 +51,9 @@ export default function FastingPage() {
   const [editStart, setEditStart] = useState(false);
 
   const s = state.data;
-  const fasting = s?.phase === "fasting";
+  // A real, logged fast (has an id) — distinct from a schedule-derived fasting
+  // phase shown before any fast is started. Only a real fast can be stopped.
+  const hasActiveFast = Boolean(s?.activeId);
 
   return (
     <div className="space-y-6">
@@ -71,14 +73,18 @@ export default function FastingPage() {
 
           {s ? (
             <div className="text-center text-sm text-ink-400">
-              {s.phase === "fasting" ? (
+              {s.phase === "fasting" && hasActiveFast ? (
                 <>
                   Голодаю с <b>{fmtTime(s.phaseStartAt)}</b> · цель до <b>{fmtTime(s.phaseEndAt)}</b>{" "}
                   {fmtDay(s.phaseEndAt) !== fmtDay(s.phaseStartAt) ? `(${fmtDay(s.phaseEndAt)})` : ""}
                 </>
+              ) : s.phase === "fasting" ? (
+                <>
+                  По расписанию голодание с <b>{fmtTime(s.phaseStartAt)}</b> до <b>{fmtTime(s.phaseEndAt)}</b> · можно отметить кнопкой
+                </>
               ) : s.phase === "eating" ? (
                 <>
-                  Окно еды до <b>{fmtTime(s.phaseEndAt)}</b> · потом снова голодание
+                  Окно еды до <b>{fmtTime(s.phaseEndAt)}</b> · потом голодание
                 </>
               ) : (
                 <>Пока нет активного голодания. Готовы начать?</>
@@ -87,7 +93,7 @@ export default function FastingPage() {
           ) : null}
 
           <div className="flex flex-wrap items-center justify-center gap-2">
-            {fasting ? (
+            {hasActiveFast ? (
               <button onClick={() => stop.mutate(undefined)} disabled={stop.isPending} className="btn-primary">
                 Завершить голодание
               </button>
@@ -96,14 +102,14 @@ export default function FastingPage() {
                 Начать голодание
               </button>
             )}
-            {fasting ? (
+            {hasActiveFast ? (
               <button onClick={() => setEditStart((v) => !v)} className="btn-ghost">
                 Изменить время начала
               </button>
             ) : null}
           </div>
 
-          {fasting && editStart ? (
+          {hasActiveFast && editStart ? (
             <div className="flex items-center gap-2">
               <input
                 type="datetime-local"

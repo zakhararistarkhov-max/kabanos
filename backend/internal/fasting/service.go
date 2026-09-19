@@ -67,7 +67,50 @@ func (s *Service) State(ctx context.Context, userID uuid.UUID, now time.Time) (*
 		return nil, err
 	}
 	st.Schedule = sched
+
+	// Nothing is running but a daily schedule is set → reflect where we are in
+	// the cycle so the ring shows progress right after the schedule is saved,
+	// before any fast has been logged. (A real fast, once auto-started by the
+	// worker or by the user, always takes precedence above.)
+	if st.Phase == "idle" && sched.Enabled {
+		if phase, start, end, ok := schedulePhase(sched, set, now); ok {
+			st.Phase = phase
+			if phase == "eating" {
+				st.GoalHours = set.EatingHours
+			} else {
+				st.GoalHours = set.FastingHours
+			}
+			st.PhaseStartAt = &start
+			st.PhaseEndAt = &end
+			st.Overrun = now.After(end)
+		}
+	}
 	return st, nil
+}
+
+// schedulePhase locates `now` in the daily schedule: the eating window
+// [eatStart, eatStart+eating) or the fasting window that follows it. It's used
+// to show a live ring before any fast has been logged. ok is false only in the
+// gap when eating+fasting hours sum to less than 24.
+func schedulePhase(sched Schedule, set Settings, now time.Time) (phase string, start, end time.Time, ok bool) {
+	loc, err := time.LoadLocation(sched.Timezone)
+	if err != nil {
+		loc = time.UTC
+	}
+	local := now.In(loc)
+	eatStart := time.Date(local.Year(), local.Month(), local.Day(), sched.EatStartHour, sched.EatStartMin, 0, 0, loc)
+	if now.Before(eatStart) {
+		eatStart = eatStart.AddDate(0, 0, -1) // yesterday's cycle may still be running
+	}
+	eatEnd := eatStart.Add(hoursToDur(set.EatingHours))
+	if now.Before(eatEnd) {
+		return "eating", eatStart, eatEnd, true
+	}
+	fastEnd := eatEnd.Add(hoursToDur(set.FastingHours))
+	if now.Before(fastEnd) {
+		return "fasting", eatEnd, fastEnd, true
+	}
+	return "", time.Time{}, time.Time{}, false
 }
 
 // Start begins a fast (idempotent: returns the current state if already fasting).
