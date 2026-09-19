@@ -25,10 +25,11 @@ type Reminder struct {
 	WindowStart     string // "HH:MM"
 	WindowEnd       string // "HH:MM"
 	Times           []string
-	Days            []int // 0..6 (0=Sunday); empty = every day
+	Days            []int  // 0..6 (0=Sunday); empty = every day
 	Condition       string // "" | "water_below_goal" | "meds_due"
 	Timezone        string
 	Enabled         bool
+	HabitID         *uuid.UUID // set when this reminder belongs to a habit
 	LastFiredAt     *time.Time
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -48,6 +49,7 @@ type Input struct {
 	Condition       string
 	Timezone        string
 	Enabled         bool
+	HabitID         *uuid.UUID
 }
 
 // DueAt reports whether the reminder should fire at instant `now`, considering

@@ -16,6 +16,7 @@ import {
   LogOut,
   Menu,
   Pill,
+  Repeat,
   Scale,
   Settings,
   Timer,
@@ -35,6 +36,7 @@ const NAV_GROUPS: { label: string; items: { href: string; label: string; Icon: L
     items: [
       { href: "/dashboard", label: "Дашборд", Icon: LayoutDashboard },
       { href: "/gtd", label: "GTD", Icon: ListChecks },
+      { href: "/habits", label: "Привычки", Icon: Repeat },
       { href: "/diary", label: "Дневник", Icon: BookText },
       { href: "/reminders", label: "Напоминания", Icon: AlarmClock },
     ],

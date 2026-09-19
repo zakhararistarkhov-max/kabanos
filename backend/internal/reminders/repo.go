@@ -16,13 +16,13 @@ type Repo struct{ db *postgres.DB }
 func NewRepo(db *postgres.DB) *Repo { return &Repo{db: db} }
 
 const cols = `id, user_id, title, body, url, mode, interval_minutes, window_start, window_end,
-	times, days, condition, timezone, enabled, last_fired_at, created_at, updated_at`
+	times, days, condition, timezone, enabled, last_fired_at, created_at, updated_at, habit_id`
 
 func scan(row pgx.Row) (*Reminder, error) {
 	var r Reminder
 	err := row.Scan(&r.ID, &r.UserID, &r.Title, &r.Body, &r.URL, &r.Mode, &r.IntervalMinutes,
 		&r.WindowStart, &r.WindowEnd, &r.Times, &r.Days, &r.Condition, &r.Timezone, &r.Enabled,
-		&r.LastFiredAt, &r.CreatedAt, &r.UpdatedAt)
+		&r.LastFiredAt, &r.CreatedAt, &r.UpdatedAt, &r.HabitID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, postgres.ErrNotFound
@@ -35,11 +35,11 @@ func scan(row pgx.Row) (*Reminder, error) {
 func (r *Repo) Create(ctx context.Context, userID uuid.UUID, in Input) (*Reminder, error) {
 	const q = `
 		INSERT INTO reminders (user_id, title, body, url, mode, interval_minutes, window_start, window_end,
-			times, days, condition, timezone, enabled, last_fired_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, now())
+			times, days, condition, timezone, enabled, last_fired_at, habit_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, now(), $14)
 		RETURNING ` + cols
 	return scan(r.db.Pool.QueryRow(ctx, q, userID, in.Title, in.Body, in.URL, in.Mode, in.IntervalMinutes,
-		in.WindowStart, in.WindowEnd, in.Times, in.Days, in.Condition, in.Timezone, in.Enabled))
+		in.WindowStart, in.WindowEnd, in.Times, in.Days, in.Condition, in.Timezone, in.Enabled, in.HabitID))
 }
 
 func (r *Repo) Update(ctx context.Context, id, userID uuid.UUID, in Input) (*Reminder, error) {
@@ -50,6 +50,18 @@ func (r *Repo) Update(ctx context.Context, id, userID uuid.UUID, in Input) (*Rem
 		RETURNING ` + cols
 	return scan(r.db.Pool.QueryRow(ctx, q, id, userID, in.Title, in.Body, in.URL, in.Mode, in.IntervalMinutes,
 		in.WindowStart, in.WindowEnd, in.Times, in.Days, in.Condition, in.Timezone, in.Enabled))
+}
+
+// SetEnabled toggles a reminder on/off (used by the habits UI).
+func (r *Repo) SetEnabled(ctx context.Context, id, userID uuid.UUID, enabled bool) error {
+	ct, err := r.db.Pool.Exec(ctx, `UPDATE reminders SET enabled=$3, updated_at=now() WHERE id=$1 AND user_id=$2`, id, userID, enabled)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return postgres.ErrNotFound
+	}
+	return nil
 }
 
 func (r *Repo) Delete(ctx context.Context, id, userID uuid.UUID) error {
@@ -63,8 +75,15 @@ func (r *Repo) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	return nil
 }
 
+// ListByUser returns the user's standalone reminders (habit reminders are shown
+// under their habit, not here).
 func (r *Repo) ListByUser(ctx context.Context, userID uuid.UUID) ([]Reminder, error) {
-	return r.query(ctx, `SELECT `+cols+` FROM reminders WHERE user_id=$1 ORDER BY created_at`, userID)
+	return r.query(ctx, `SELECT `+cols+` FROM reminders WHERE user_id=$1 AND habit_id IS NULL ORDER BY created_at`, userID)
+}
+
+// ListByHabit returns the reminders attached to one habit.
+func (r *Repo) ListByHabit(ctx context.Context, userID, habitID uuid.UUID) ([]Reminder, error) {
+	return r.query(ctx, `SELECT `+cols+` FROM reminders WHERE user_id=$1 AND habit_id=$2 ORDER BY created_at`, userID, habitID)
 }
 
 // ListEnabled returns all enabled reminders across users (for the worker).

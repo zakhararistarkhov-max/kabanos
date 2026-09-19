@@ -26,6 +26,7 @@ import (
 	"github.com/kabanos/backend/internal/diary"
 	"github.com/kabanos/backend/internal/fasting"
 	"github.com/kabanos/backend/internal/gtd"
+	"github.com/kabanos/backend/internal/habits"
 	"github.com/kabanos/backend/internal/httpx"
 	"github.com/kabanos/backend/internal/meds"
 	"github.com/kabanos/backend/internal/nutrition"
@@ -140,6 +141,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	diarySvc := diary.NewService(diaryRepo, store)
 	pushSvc := push.NewService(pushRepo, cfg.VAPID, logger)
 	remindersSvc := reminders.NewService(remindersRepo)
+	habitsSvc := habits.NewService(habits.NewRepo(db), remindersSvc)
 	gtdSvc := gtd.NewService(gtdRepo, store)
 	calendarSvc, err := calendar.NewService(calendarRepo, calendar.DeriveKey(cfg.CalendarEncKey, cfg.Auth.JWTSecret), logger)
 	if err != nil {
@@ -158,6 +160,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	diaryH := diary.NewHandler(diarySvc)
 	pushH := push.NewHandler(pushSvc)
 	remindersH := reminders.NewHandler(remindersSvc)
+	habitsH := habits.NewHandler(habitsSvc)
 	gtdH := gtd.NewHandler(gtdSvc)
 	calendarH := calendar.NewHandler(calendarSvc)
 
@@ -215,6 +218,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 			r.Mount("/diary", diaryH.Routes())
 			r.Mount("/push", pushH.Routes())
 			r.Mount("/reminders", remindersH.Routes())
+			r.Mount("/habits", habitsH.Routes())
 			r.Mount("/gtd", gtdH.Routes())
 			r.Mount("/calendar", calendarH.Routes())
 		})

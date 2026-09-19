@@ -364,6 +364,40 @@ export interface DiaryDateCount {
   count: number;
 }
 
+// --- habits ---
+
+export type HabitKind = "good" | "bad";
+export type HabitStatus = "" | "positive" | "negative";
+
+export interface Habit {
+  id: string;
+  name: string;
+  kind: HabitKind;
+  description: string;
+  archived: boolean;
+  reminderCount: number;
+  logCount: number;
+  lastStatus: HabitStatus;
+  lastLogAt: string | null;
+  createdAt: string;
+}
+
+export interface HabitLog {
+  id: string;
+  note: string;
+  status: HabitStatus;
+  createdAt: string;
+}
+
+export interface HabitReminder {
+  id: string;
+  text: string;
+  times: string[];
+  days: number[];
+  timezone: string;
+  enabled: boolean;
+}
+
 // --- reminders ---
 
 export type ReminderMode = "interval" | "times";
