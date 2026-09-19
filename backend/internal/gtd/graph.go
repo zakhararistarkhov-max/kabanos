@@ -66,20 +66,34 @@ type BoardInfo struct {
 	Summary   Summary
 }
 
-// FeedTask is one card in the "to-do feed" — an open task node somewhere in the
-// user's graphs, enriched with its board and colour for urgency ordering.
+// FeedTask is one card in the "to-do feed" — an open task (gtd_item), whether
+// or not it's placed on a graph, coloured by its due date for urgency ordering.
 type FeedTask struct {
-	NodeID        uuid.UUID
+	NodeID        *uuid.UUID // set when the task is also on the map (for its photos)
 	ItemID        *uuid.UUID
 	Label         string
 	Note          string
 	Color         string
 	Deadline      *string
 	ImageURLs     []string
-	BoardID       *uuid.UUID
+	BoardID       *uuid.UUID // the task's project (nil = inbox / no project)
 	BoardTitle    string
 	GraphPriority int
 	Priority      int // task (item) priority, 0..5
+}
+
+// feedRow is the raw row backing the to-do feed (before colour/image resolution).
+type feedRow struct {
+	ItemID          uuid.UUID
+	Title           string
+	Notes           string
+	DueOn           *string
+	Priority        int
+	ProjectID       *uuid.UUID
+	ProjectTitle    string
+	ProjectPriority int
+	NodeID          *uuid.UUID
+	ImageKeys       []string
 }
 
 type GraphEdge struct {
@@ -143,6 +157,38 @@ func (r *Repo) ListGraph(ctx context.Context, userID uuid.UUID, board *uuid.UUID
 		edges = append(edges, e)
 	}
 	return nodes, edges, erows.Err()
+}
+
+// OpenTasksForFeed returns every open (not done) task — inbox and lists alike,
+// excluding reference/someday — with its project and any map node (for photos).
+// This is what the to-do feed shows, so a captured task appears there too.
+func (r *Repo) OpenTasksForFeed(ctx context.Context, userID uuid.UUID) ([]feedRow, error) {
+	const q = `
+		SELECT i.id, i.title, COALESCE(i.notes,''), to_char(i.due_on,'YYYY-MM-DD'), i.priority,
+			i.project_id, COALESCE(p.title,''), COALESCE(p.priority,0),
+			n.id, COALESCE(n.image_keys, '{}')
+		FROM gtd_items i
+		LEFT JOIN gtd_projects p ON p.id = i.project_id
+		LEFT JOIN LATERAL (
+			SELECT id, image_keys FROM gtd_graph_nodes
+			WHERE item_id = i.id AND kind='task' ORDER BY created_at LIMIT 1
+		) n ON true
+		WHERE i.user_id=$1 AND NOT i.done AND i.bucket NOT IN ('reference','someday')`
+	rows, err := r.db.Read().Query(ctx, q, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []feedRow{}
+	for rows.Next() {
+		var fr feedRow
+		if err := rows.Scan(&fr.ItemID, &fr.Title, &fr.Notes, &fr.DueOn, &fr.Priority,
+			&fr.ProjectID, &fr.ProjectTitle, &fr.ProjectPriority, &fr.NodeID, &fr.ImageKeys); err != nil {
+			return nil, err
+		}
+		out = append(out, fr)
+	}
+	return out, rows.Err()
 }
 
 func (r *Repo) GetGraphNode(ctx context.Context, userID, id uuid.UUID) (*GraphNode, error) {
@@ -531,53 +577,33 @@ func (s *Service) Boards(ctx context.Context, userID uuid.UUID) ([]BoardInfo, er
 	return append([]BoardInfo{root}, boards...), nil
 }
 
-// Feed collects every open task node across all of the user's boards, coloured
-// by its deadline and ordered by urgency (red → yellow → green) then priority —
-// the backing list for the "to-do feed".
+// Feed returns every open task (captured or on the map), coloured by its due
+// date and ordered by urgency (red → yellow → green) then priority — the backing
+// list for the "to-do feed". Tasks are a single entity, so the feed shows them
+// wherever they were created.
 func (s *Service) Feed(ctx context.Context, userID uuid.UUID) ([]FeedTask, error) {
 	st, err := s.repo.GetSettings(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now()
-	out := []FeedTask{}
-
-	collect := func(board *uuid.UUID, title string, graphPriority int) error {
-		visited := map[uuid.UUID]bool{}
-		if board != nil {
-			visited[*board] = true
-		}
-		nodes, _, _, err := s.BoardView(ctx, userID, board, st, now, visited)
-		if err != nil {
-			return err
-		}
-		for i := range nodes {
-			n := nodes[i]
-			if n.Kind != "task" || n.Done {
-				continue
-			}
-			out = append(out, FeedTask{
-				NodeID: n.ID, ItemID: n.ItemID, Label: n.Label, Note: n.Note, Color: n.Color,
-				Deadline: n.Deadline, ImageURLs: n.ImageURLs, BoardID: board, BoardTitle: title,
-				GraphPriority: graphPriority, Priority: n.Priority,
-			})
-		}
-		return nil
-	}
-
-	if err := collect(nil, "Все проекты", 0); err != nil {
-		return nil, err
-	}
-	projects, err := s.repo.ListProjects(ctx, userID)
+	rows, err := s.repo.OpenTasksForFeed(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	for i := range projects {
-		p := projects[i]
-		pid := p.ID
-		if err := collect(&pid, p.Title, p.Priority); err != nil {
-			return nil, err
+	out := make([]FeedTask, 0, len(rows))
+	for i := range rows {
+		r := rows[i]
+		title := r.ProjectTitle
+		if title == "" {
+			title = "Входящие"
 		}
+		itemID := r.ItemID
+		out = append(out, FeedTask{
+			NodeID: r.NodeID, ItemID: &itemID, Label: r.Title, Note: r.Notes,
+			Color: leafColor(r.DueOn, now, st), Deadline: r.DueOn, ImageURLs: s.imageURLs(ctx, r.ImageKeys),
+			BoardID: r.ProjectID, BoardTitle: title, GraphPriority: r.ProjectPriority, Priority: r.Priority,
+		})
 	}
 
 	sort.SliceStable(out, func(a, b int) bool {
@@ -768,7 +794,7 @@ func (h *Handler) getBoards(w http.ResponseWriter, r *http.Request) {
 }
 
 type feedTaskDTO struct {
-	NodeID        string   `json:"nodeId"`
+	NodeID        *string  `json:"nodeId"`
 	ItemID        *string  `json:"itemId"`
 	Label         string   `json:"label"`
 	Note          string   `json:"note"`
@@ -794,8 +820,12 @@ func (h *Handler) getGraphFeed(w http.ResponseWriter, r *http.Request) {
 			urls = []string{}
 		}
 		d := feedTaskDTO{
-			NodeID: t.NodeID.String(), Label: t.Label, Note: t.Note, Color: t.Color, Deadline: t.Deadline,
+			Label: t.Label, Note: t.Note, Color: t.Color, Deadline: t.Deadline,
 			ImageURLs: urls, BoardTitle: t.BoardTitle, GraphPriority: t.GraphPriority, Priority: t.Priority,
+		}
+		if t.NodeID != nil {
+			s := t.NodeID.String()
+			d.NodeID = &s
 		}
 		if t.ItemID != nil {
 			s := t.ItemID.String()

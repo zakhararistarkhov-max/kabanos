@@ -8,6 +8,12 @@ import { useToggleDone } from "@/hooks/useGtd";
 import type { GtdColor, GtdFeedTask } from "@/lib/types";
 import { PriorityBars, priorityLabel } from "@/components/gtd/PriorityBars";
 
+// Stable identity for a feed card — a task's item id (every card has one); the
+// map node id is only a fallback.
+function keyOf(c: GtdFeedTask): string {
+  return c.itemId ?? c.nodeId ?? "";
+}
+
 const ACCENT: Record<GtdColor, string> = { green: "#34d399", yellow: "#f59e0b", red: "#ef4444" };
 const COLOR_TEXT: Record<GtdColor, string> = { green: "text-good", yellow: "text-warn", red: "text-bad" };
 
@@ -37,12 +43,12 @@ export function TaskFeed() {
   useEffect(() => {
     const next = feed.data?.items ?? [];
     setCards((prev) => {
-      const prevIds = prev.map((c) => c.nodeId);
-      const nextSet = new Set(next.map((c) => c.nodeId));
+      const prevIds = prev.map(keyOf);
+      const nextSet = new Set(next.map(keyOf));
       const sameSet = prevIds.length === nextSet.size && prevIds.every((id) => nextSet.has(id));
       if (sameSet && prev.length) {
-        const byId = new Map(next.map((c) => [c.nodeId, c]));
-        return prev.map((c) => byId.get(c.nodeId) ?? c);
+        const byId = new Map(next.map((c) => [keyOf(c), c]));
+        return prev.map((c) => byId.get(keyOf(c)) ?? c);
       }
       return next;
     });
@@ -107,7 +113,7 @@ export function TaskFeed() {
       <div className="pointer-events-none absolute right-1 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-1.5">
         {cards.slice(0, 40).map((c, i) => (
           <span
-            key={c.nodeId}
+            key={keyOf(c)}
             className="h-4 w-1 rounded-full transition"
             style={{ background: i === index ? ACCENT[c.color] : "rgb(var(--ink-700))", opacity: i === index ? 1 : 0.5 }}
           />
@@ -121,7 +127,7 @@ export function TaskFeed() {
         style={{ scrollbarWidth: "none" }}
       >
         {cards.map((c) => (
-          <div key={c.nodeId} className="flex h-full snap-start snap-always items-center justify-center p-1">
+          <div key={keyOf(c)} className="flex h-full snap-start snap-always items-center justify-center p-1">
             <FeedCard
               task={c}
               onDone={() => c.itemId && toggleDone.mutate({ id: c.itemId, done: true })}

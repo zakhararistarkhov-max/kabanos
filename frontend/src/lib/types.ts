@@ -498,7 +498,7 @@ export interface GtdBoardInfo {
 }
 
 export interface GtdFeedTask {
-  nodeId: string;
+  nodeId: string | null;
   itemId: string | null;
   label: string;
   note: string;
