@@ -65,8 +65,8 @@ export interface FastingStats {
 
 export interface FastingSchedule {
   enabled: boolean;
-  startHour: number;
-  startMinute: number;
+  eatStartHour: number;
+  eatStartMinute: number;
   timezone: string;
   autoStart: boolean;
   notifyStart: boolean;

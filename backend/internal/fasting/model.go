@@ -16,13 +16,14 @@ type Settings struct {
 	EatingHours  float64
 }
 
-// Schedule is the optional daily plan: start fasting at StartHour:StartMinute
-// (in Timezone) every day, optionally auto-starting the fast and sending push
-// notifications at the start and every elapsed hour.
+// Schedule is the optional daily plan: the eating window opens at
+// EatStartHour:EatStartMinute (in Timezone); the fast then begins when the
+// window closes (eat start + eating hours), which is when we auto-start the fast
+// and send push notifications at the start and every elapsed hour.
 type Schedule struct {
 	Enabled      bool
-	StartHour    int
-	StartMinute  int
+	EatStartHour int
+	EatStartMin  int
 	Timezone     string
 	AutoStart    bool
 	NotifyStart  bool
@@ -34,6 +35,7 @@ type Schedule struct {
 type ScheduleRow struct {
 	UserID         uuid.UUID
 	FastingHours   float64
+	EatingHours    float64
 	Schedule       Schedule
 	AutoStartedOn  *time.Time // last local date auto-started (nil = never)
 	NotifyAnchor   *time.Time // active fast start last notified about

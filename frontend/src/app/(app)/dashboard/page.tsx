@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Plus, SlidersHorizontal } from "lucide-react";
-import { useSession } from "@/hooks/useSession";
 import { useDashboardLayout, type Span } from "@/hooks/useDashboardLayout";
 import { useGridColumns } from "@/hooks/useGridColumns";
 import { WIDGET_IDS, spanClass, widgetById } from "@/components/dashboard/widgets";
@@ -10,14 +9,11 @@ import { EditableCard } from "@/components/dashboard/EditableCard";
 import { KabanosMark } from "@/components/Logo";
 
 export default function DashboardPage() {
-  const { data: session } = useSession();
   const { mounted, enabled, hidden, spans, toggle, reorder, setSpan, reset } = useDashboardLayout(WIDGET_IDS);
   const [customizing, setCustomizing] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const cols = useGridColumns();
-
-  const name = session?.user?.displayName || "друг";
 
   // Effective width for a widget: the user's override, else the widget default.
   const effSpan = (id: string): Span => spans[id] ?? (widgetById(id)?.span ?? 1);
@@ -66,17 +62,9 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="animate-float">
-            <KabanosMark size={46} />
-          </span>
-          <div>
-            <h1 className="text-2xl font-bold">
-              Привет, <span className="text-gradient">{name}</span> 👋
-            </h1>
-            <p className="text-sm text-ink-500">Коротко о том, как проходит день.</p>
-          </div>
-        </div>
+        <span className="animate-float">
+          <KabanosMark size={46} />
+        </span>
         <button onClick={() => setCustomizing((s) => !s)} className={customizing ? "btn-primary" : "btn-ghost"}>
           {customizing ? (
             <>

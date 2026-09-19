@@ -42,8 +42,8 @@ type statsDTO struct {
 
 type scheduleDTO struct {
 	Enabled      bool   `json:"enabled"`
-	StartHour    int    `json:"startHour"`
-	StartMinute  int    `json:"startMinute"`
+	EatStartHour int    `json:"eatStartHour"`
+	EatStartMin  int    `json:"eatStartMinute"`
 	Timezone     string `json:"timezone"`
 	AutoStart    bool   `json:"autoStart"`
 	NotifyStart  bool   `json:"notifyStart"`
@@ -81,7 +81,7 @@ func toStateDTO(s *State) stateDTO {
 
 func toScheduleDTO(s Schedule) scheduleDTO {
 	return scheduleDTO{
-		Enabled: s.Enabled, StartHour: s.StartHour, StartMinute: s.StartMinute, Timezone: s.Timezone,
+		Enabled: s.Enabled, EatStartHour: s.EatStartHour, EatStartMin: s.EatStartMin, Timezone: s.Timezone,
 		AutoStart: s.AutoStart, NotifyStart: s.NotifyStart, NotifyHourly: s.NotifyHourly,
 	}
 }
@@ -138,8 +138,8 @@ func (h *Handler) setSettings(w http.ResponseWriter, r *http.Request) {
 
 type scheduleRequest struct {
 	Enabled      bool   `json:"enabled"`
-	StartHour    int    `json:"startHour"`
-	StartMinute  int    `json:"startMinute"`
+	EatStartHour int    `json:"eatStartHour"`
+	EatStartMin  int    `json:"eatStartMinute"`
 	Timezone     string `json:"timezone"`
 	AutoStart    bool   `json:"autoStart"`
 	NotifyStart  bool   `json:"notifyStart"`
@@ -153,14 +153,14 @@ func (h *Handler) setSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v := validate.New()
-	v.Check(req.StartHour >= 0 && req.StartHour <= 23, "startHour", "must be 0..23")
-	v.Check(req.StartMinute >= 0 && req.StartMinute <= 59, "startMinute", "must be 0..59")
+	v.Check(req.EatStartHour >= 0 && req.EatStartHour <= 23, "eatStartHour", "must be 0..23")
+	v.Check(req.EatStartMin >= 0 && req.EatStartMin <= 59, "eatStartMinute", "must be 0..59")
 	if !v.Valid() {
 		httpx.Error(w, r, httpx.ValidationError(v.Errors))
 		return
 	}
 	s, err := h.svc.SetSchedule(r.Context(), auth.UserID(r.Context()), Schedule{
-		Enabled: req.Enabled, StartHour: req.StartHour, StartMinute: req.StartMinute, Timezone: req.Timezone,
+		Enabled: req.Enabled, EatStartHour: req.EatStartHour, EatStartMin: req.EatStartMin, Timezone: req.Timezone,
 		AutoStart: req.AutoStart, NotifyStart: req.NotifyStart, NotifyHourly: req.NotifyHourly,
 	})
 	h.writeState(w, r, s, err)

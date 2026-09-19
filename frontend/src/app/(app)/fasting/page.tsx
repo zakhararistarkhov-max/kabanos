@@ -133,7 +133,7 @@ export default function FastingPage() {
       </div>
 
       {/* daily schedule + notifications */}
-      {s ? <ScheduleCard schedule={s.schedule} fastingHours={s.fastingHours} /> : null}
+      {s ? <ScheduleCard schedule={s.schedule} fastingHours={s.fastingHours} eatingHours={s.eatingHours} /> : null}
 
       {/* history */}
       <div className="card">
@@ -252,29 +252,33 @@ function Toggle({ label, checked, onChange, disabled }: { label: string; checked
   );
 }
 
-function ScheduleCard({ schedule, fastingHours }: { schedule: FastingSchedule; fastingHours: number }) {
+function addMinutes(hhmm: string, mins: number): string | null {
+  const [h, m] = hhmm.split(":").map((x) => parseInt(x, 10));
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  const total = ((h * 60 + m + Math.round(mins)) % (24 * 60) + 24 * 60) % (24 * 60);
+  return `${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`;
+}
+
+function ScheduleCard({ schedule, fastingHours, eatingHours }: { schedule: FastingSchedule; fastingHours: number; eatingHours: number }) {
   const save = useSetFastingSchedule();
   const push = usePush();
 
   const [enabled, setEnabled] = useState(schedule.enabled);
-  const [time, setTime] = useState(`${pad2(schedule.startHour)}:${pad2(schedule.startMinute)}`);
+  const [time, setTime] = useState(`${pad2(schedule.eatStartHour)}:${pad2(schedule.eatStartMinute)}`);
   const [autoStart, setAutoStart] = useState(schedule.autoStart);
   const [notifyStart, setNotifyStart] = useState(schedule.notifyStart);
   const [notifyHourly, setNotifyHourly] = useState(schedule.notifyHourly);
 
-  const endTime = (() => {
-    const [h, m] = time.split(":").map((x) => parseInt(x, 10));
-    if (Number.isNaN(h) || Number.isNaN(m)) return null;
-    const total = (h * 60 + m + Math.round(fastingHours * 60)) % (24 * 60);
-    return `${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`;
-  })();
+  // The fast begins when the eating window closes (eat start + eating hours);
+  // it ends one eating-window-start later (eat start + 24h → same clock time).
+  const fastStart = addMinutes(time, eatingHours * 60);
 
   function onSave() {
     const [h, m] = time.split(":").map((x) => parseInt(x, 10));
     save.mutate({
       enabled,
-      startHour: Number.isNaN(h) ? 20 : h,
-      startMinute: Number.isNaN(m) ? 0 : m,
+      eatStartHour: Number.isNaN(h) ? 12 : h,
+      eatStartMinute: Number.isNaN(m) ? 0 : m,
       timezone: browserTZ(),
       autoStart,
       notifyStart,
@@ -289,7 +293,7 @@ function ScheduleCard({ schedule, fastingHours }: { schedule: FastingSchedule; f
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="font-semibold">Расписание и уведомления</h2>
-          <p className="text-sm text-ink-500">Начинайте голодание каждый день в одно время и получайте напоминания.</p>
+          <p className="text-sm text-ink-500">Укажите, когда начинаете есть каждый день, — остальное посчитаем и напомним.</p>
         </div>
         <BellRing size={20} className="shrink-0 text-brand" />
       </div>
@@ -303,11 +307,12 @@ function ScheduleCard({ schedule, fastingHours }: { schedule: FastingSchedule; f
         <div className="space-y-3">
           <div className="flex flex-wrap items-end gap-3">
             <div>
-              <label className="label">Начало голодания</label>
+              <label className="label">Начало периода еды</label>
               <input type="time" className="input !w-auto" value={time} onChange={(e) => setTime(e.target.value)} />
             </div>
             <p className="pb-2 text-sm text-ink-500">
-              Голодание {fastingHours} ч{endTime ? <> · окончание около <b>{endTime}</b></> : null}
+              Окно еды {time}–{fastStart ?? "—"} ({eatingHours} ч)
+              {fastStart ? <> · голодание {fastingHours} ч начнётся в <b>{fastStart}</b></> : null}
             </p>
           </div>
 

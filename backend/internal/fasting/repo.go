@@ -40,16 +40,16 @@ func (r *Repo) UpsertSettings(ctx context.Context, userID uuid.UUID, s Settings)
 }
 
 func defaultSchedule() Schedule {
-	return Schedule{Enabled: false, StartHour: 20, StartMinute: 0, Timezone: "UTC", AutoStart: true, NotifyStart: true, NotifyHourly: true}
+	return Schedule{Enabled: false, EatStartHour: 12, EatStartMin: 0, Timezone: "UTC", AutoStart: true, NotifyStart: true, NotifyHourly: true}
 }
 
 // GetSchedule returns the user's daily schedule (defaults when no row yet).
 func (r *Repo) GetSchedule(ctx context.Context, userID uuid.UUID) (Schedule, error) {
 	var s Schedule
 	err := r.db.Read().QueryRow(ctx,
-		`SELECT schedule_enabled, start_hour, start_minute, timezone, auto_start, notify_start, notify_hourly
+		`SELECT schedule_enabled, eat_start_hour, eat_start_minute, timezone, auto_start, notify_start, notify_hourly
 		 FROM fasting_settings WHERE user_id=$1`, userID).
-		Scan(&s.Enabled, &s.StartHour, &s.StartMinute, &s.Timezone, &s.AutoStart, &s.NotifyStart, &s.NotifyHourly)
+		Scan(&s.Enabled, &s.EatStartHour, &s.EatStartMin, &s.Timezone, &s.AutoStart, &s.NotifyStart, &s.NotifyHourly)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return defaultSchedule(), nil
@@ -64,19 +64,19 @@ func (r *Repo) GetSchedule(ctx context.Context, userID uuid.UUID) (Schedule, err
 // not immediately fire a stale hourly push.
 func (r *Repo) UpsertSchedule(ctx context.Context, userID uuid.UUID, s Schedule) error {
 	_, err := r.db.Pool.Exec(ctx,
-		`INSERT INTO fasting_settings (user_id, schedule_enabled, start_hour, start_minute, timezone, auto_start, notify_start, notify_hourly)
+		`INSERT INTO fasting_settings (user_id, schedule_enabled, eat_start_hour, eat_start_minute, timezone, auto_start, notify_start, notify_hourly)
 		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 		 ON CONFLICT (user_id) DO UPDATE SET
-		   schedule_enabled=$2, start_hour=$3, start_minute=$4, timezone=$5,
+		   schedule_enabled=$2, eat_start_hour=$3, eat_start_minute=$4, timezone=$5,
 		   auto_start=$6, notify_start=$7, notify_hourly=$8, updated_at=now()`,
-		userID, s.Enabled, s.StartHour, s.StartMinute, s.Timezone, s.AutoStart, s.NotifyStart, s.NotifyHourly)
+		userID, s.Enabled, s.EatStartHour, s.EatStartMin, s.Timezone, s.AutoStart, s.NotifyStart, s.NotifyHourly)
 	return err
 }
 
 // ListEnabledSchedules returns every user with an enabled schedule (for the worker).
 func (r *Repo) ListEnabledSchedules(ctx context.Context) ([]ScheduleRow, error) {
 	rows, err := r.db.Read().Query(ctx,
-		`SELECT user_id, fasting_hours::float8, schedule_enabled, start_hour, start_minute, timezone,
+		`SELECT user_id, fasting_hours::float8, eating_hours::float8, schedule_enabled, eat_start_hour, eat_start_minute, timezone,
 		        auto_start, notify_start, notify_hourly, auto_started_on, notify_anchor, notify_last_hour
 		 FROM fasting_settings WHERE schedule_enabled`)
 	if err != nil {
@@ -86,8 +86,8 @@ func (r *Repo) ListEnabledSchedules(ctx context.Context) ([]ScheduleRow, error) 
 	out := []ScheduleRow{}
 	for rows.Next() {
 		var sr ScheduleRow
-		if err := rows.Scan(&sr.UserID, &sr.FastingHours, &sr.Schedule.Enabled, &sr.Schedule.StartHour,
-			&sr.Schedule.StartMinute, &sr.Schedule.Timezone, &sr.Schedule.AutoStart, &sr.Schedule.NotifyStart,
+		if err := rows.Scan(&sr.UserID, &sr.FastingHours, &sr.EatingHours, &sr.Schedule.Enabled, &sr.Schedule.EatStartHour,
+			&sr.Schedule.EatStartMin, &sr.Schedule.Timezone, &sr.Schedule.AutoStart, &sr.Schedule.NotifyStart,
 			&sr.Schedule.NotifyHourly, &sr.AutoStartedOn, &sr.NotifyAnchor, &sr.NotifyLastHour); err != nil {
 			return nil, err
 		}

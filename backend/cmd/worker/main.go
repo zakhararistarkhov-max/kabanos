@@ -215,9 +215,14 @@ func processFastingSchedules(ctx context.Context, repo *fasting.Repo, pushSvc *p
 			continue
 		}
 
-		// 1) Auto-start the fast at the scheduled local time (once per day).
+		// 1) Auto-start the fast at the scheduled local time (once per day). The
+		// fast begins when the eating window closes: eat start + eating hours.
 		if !hasActive && row.Schedule.AutoStart {
-			slot := time.Date(local.Year(), local.Month(), local.Day(), row.Schedule.StartHour, row.Schedule.StartMinute, 0, 0, loc)
+			fastMin := (row.Schedule.EatStartHour*60 + row.Schedule.EatStartMin + int(math.Round(row.EatingHours*60))) % (24 * 60)
+			if fastMin < 0 {
+				fastMin += 24 * 60
+			}
+			slot := time.Date(local.Year(), local.Month(), local.Day(), fastMin/60, fastMin%60, 0, 0, loc)
 			today := local.Format("2006-01-02")
 			startedToday := row.AutoStartedOn != nil && row.AutoStartedOn.Format("2006-01-02") == today
 			if !startedToday && !now.Before(slot) && now.Sub(slot) <= fastingFireTolerance {

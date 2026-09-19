@@ -151,11 +151,11 @@ func (s *Service) SetSchedule(ctx context.Context, userID uuid.UUID, in Schedule
 	if _, err := time.LoadLocation(in.Timezone); err != nil {
 		in.Timezone = "UTC" // unknown zone from the client → fall back rather than reject
 	}
-	if in.StartHour < 0 || in.StartHour > 23 {
-		in.StartHour = 20
+	if in.EatStartHour < 0 || in.EatStartHour > 23 {
+		in.EatStartHour = 12
 	}
-	if in.StartMinute < 0 || in.StartMinute > 59 {
-		in.StartMinute = 0
+	if in.EatStartMin < 0 || in.EatStartMin > 59 {
+		in.EatStartMin = 0
 	}
 	if err := s.repo.UpsertSchedule(ctx, userID, in); err != nil {
 		return nil, err
