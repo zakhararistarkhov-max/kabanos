@@ -410,6 +410,44 @@ export interface HabitReminder {
   enabled: boolean;
 }
 
+// --- decision journal ---
+
+export type DecisionStatus = "open" | "reviewed";
+
+export interface Decision {
+  id: string;
+  title: string;
+  context: string;
+  decision: string;
+  expected: string;
+  confidence: number | null;
+  decidedOn: string;
+  reviewAt: string | null;
+  status: DecisionStatus;
+  result: string;
+  rating: number | null;
+  lessons: string;
+  reviewedAt: string | null;
+  due: boolean;
+  createdAt: string;
+}
+
+export interface DecisionInput {
+  title: string;
+  context?: string;
+  decision?: string;
+  expected?: string;
+  confidence?: number | null;
+  decidedOn?: string;
+  reviewAt?: string | null;
+}
+
+export interface DecisionReview {
+  result: string;
+  rating?: number | null;
+  lessons?: string;
+}
+
 // --- reminders ---
 
 export type ReminderMode = "interval" | "times";

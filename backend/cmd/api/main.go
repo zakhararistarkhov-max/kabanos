@@ -23,6 +23,7 @@ import (
 	"github.com/kabanos/backend/internal/auth"
 	"github.com/kabanos/backend/internal/calendar"
 	"github.com/kabanos/backend/internal/config"
+	"github.com/kabanos/backend/internal/decisions"
 	"github.com/kabanos/backend/internal/diary"
 	"github.com/kabanos/backend/internal/fasting"
 	"github.com/kabanos/backend/internal/gtd"
@@ -142,6 +143,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	pushSvc := push.NewService(pushRepo, cfg.VAPID, logger)
 	remindersSvc := reminders.NewService(remindersRepo)
 	habitsSvc := habits.NewService(habits.NewRepo(db), remindersSvc)
+	decisionsSvc := decisions.NewService(decisions.NewRepo(db))
 	gtdSvc := gtd.NewService(gtdRepo, store)
 	calendarSvc, err := calendar.NewService(calendarRepo, calendar.DeriveKey(cfg.CalendarEncKey, cfg.Auth.JWTSecret), logger)
 	if err != nil {
@@ -161,6 +163,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	pushH := push.NewHandler(pushSvc)
 	remindersH := reminders.NewHandler(remindersSvc)
 	habitsH := habits.NewHandler(habitsSvc)
+	decisionsH := decisions.NewHandler(decisionsSvc)
 	gtdH := gtd.NewHandler(gtdSvc)
 	calendarH := calendar.NewHandler(calendarSvc)
 
@@ -219,6 +222,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 			r.Mount("/push", pushH.Routes())
 			r.Mount("/reminders", remindersH.Routes())
 			r.Mount("/habits", habitsH.Routes())
+			r.Mount("/decisions", decisionsH.Routes())
 			r.Mount("/gtd", gtdH.Routes())
 			r.Mount("/calendar", calendarH.Routes())
 		})

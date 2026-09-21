@@ -25,6 +25,7 @@ import (
 
 	"github.com/kabanos/backend/internal/calendar"
 	"github.com/kabanos/backend/internal/config"
+	"github.com/kabanos/backend/internal/decisions"
 	"github.com/kabanos/backend/internal/fasting"
 	"github.com/kabanos/backend/internal/mailer"
 	"github.com/kabanos/backend/internal/notify"
@@ -83,6 +84,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	pushSvc := push.NewService(push.NewRepo(db), cfg.VAPID, logger)
 	remRepo := reminders.NewRepo(db)
 	fastingRepo := fasting.NewRepo(db)
+	decisionsRepo := decisions.NewRepo(db)
 	calSvc, err := calendar.NewService(calendar.NewRepo(db), calendar.DeriveKey(cfg.CalendarEncKey, cfg.Auth.JWTSecret), logger)
 	if err != nil {
 		return fmt.Errorf("calendar service: %w", err)
@@ -120,6 +122,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 		case <-remTicker.C:
 			processReminders(ctx, remRepo, pushSvc, logger)
 			processFastingSchedules(ctx, fastingRepo, pushSvc, logger)
+			processDecisionReviews(ctx, decisionsRepo, pushSvc, logger)
 		case <-calTicker.C:
 			calSvc.SyncAll(ctx)
 		}
@@ -287,6 +290,36 @@ func processFastingSchedules(ctx context.Context, repo *fasting.Repo, pushSvc *p
 				}
 				sendFastingPush(ctx, pushSvc, logger, row.UserID, n)
 			}
+		}
+	}
+}
+
+// processDecisionReviews nudges the user (once) when a journaled decision's
+// review date has arrived, so they come back to record the outcome.
+func processDecisionReviews(ctx context.Context, repo *decisions.Repo, pushSvc *push.Service, logger *slog.Logger) {
+	if !pushSvc.Enabled() {
+		return
+	}
+	due, err := repo.DueForNudge(ctx)
+	if err != nil {
+		logger.Error("list decision reviews", slog.String("error", err.Error()))
+		return
+	}
+	for _, d := range due {
+		won, err := repo.ClaimNudge(ctx, d.ID)
+		if err != nil {
+			logger.Error("claim decision nudge", slog.String("error", err.Error()))
+			continue
+		}
+		if !won {
+			continue
+		}
+		if _, err := pushSvc.Send(ctx, d.UserID, push.Notification{
+			Title: "Пора оценить решение",
+			Body:  d.Title,
+			URL:   "/decisions",
+		}); err != nil {
+			logger.Error("send decision nudge", slog.String("error", err.Error()))
 		}
 	}
 }
