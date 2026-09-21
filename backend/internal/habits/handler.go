@@ -12,6 +12,7 @@ import (
 	"github.com/kabanos/backend/internal/httpx"
 	"github.com/kabanos/backend/internal/postgres"
 	"github.com/kabanos/backend/internal/reminders"
+	"github.com/kabanos/backend/internal/timex"
 	"github.com/kabanos/backend/internal/validate"
 )
 
@@ -25,6 +26,9 @@ func (h *Handler) Routes() http.Handler {
 	r.Post("/", h.create)
 	r.Put("/{id}", h.update)
 	r.Delete("/{id}", h.delete)
+	r.Get("/{id}/checkins", h.listCheckins)
+	r.Put("/{id}/checkins", h.setCheckin)
+	r.Delete("/{id}/checkins", h.clearCheckin)
 	r.Get("/{id}/logs", h.listLogs)
 	r.Post("/{id}/logs", h.addLog)
 	r.Delete("/{id}/logs/{logId}", h.deleteLog)
@@ -47,14 +51,28 @@ type habitDTO struct {
 	LogCount      int        `json:"logCount"`
 	LastStatus    string     `json:"lastStatus"`
 	LastLogAt     *time.Time `json:"lastLogAt"`
+	Color         string     `json:"color"`
+	Fails         int        `json:"fails"`
+	Successes     int        `json:"successes"`
+	Streak        int        `json:"streak"`
+	Recent        []Checkin  `json:"recent"`
 	CreatedAt     time.Time  `json:"createdAt"`
 }
 
 func toHabitDTO(h Habit) habitDTO {
+	recent := h.Recent
+	if recent == nil {
+		recent = []Checkin{}
+	}
+	color := h.Color
+	if color == "" {
+		color = "green"
+	}
 	return habitDTO{
 		ID: h.ID.String(), Name: h.Name, Kind: h.Kind, Description: h.Description, Archived: h.Archived,
-		ReminderCount: h.ReminderCount, LogCount: h.LogCount, LastStatus: h.LastStatus,
-		LastLogAt: h.LastLogAt, CreatedAt: h.CreatedAt,
+		ReminderCount: h.ReminderCount, LogCount: h.LogCount, LastStatus: h.LastStatus, LastLogAt: h.LastLogAt,
+		Color: color, Fails: h.Fails, Successes: h.Successes, Streak: h.Streak, Recent: recent,
+		CreatedAt: h.CreatedAt,
 	}
 }
 
@@ -89,7 +107,8 @@ func toReminderDTO(r reminders.Reminder) habitReminderDTO {
 // ---------- habits ----------
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	items, err := h.svc.List(r.Context(), auth.UserID(r.Context()))
+	today := timex.Today(timex.Location(r.URL.Query().Get("tz")))
+	items, err := h.svc.List(r.Context(), auth.UserID(r.Context()), today)
 	if err != nil {
 		httpx.Error(w, r, err)
 		return
@@ -170,6 +189,75 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.Delete(r.Context(), id, auth.UserID(r.Context())); err != nil {
+		renderErr(w, r, err, "habit not found")
+		return
+	}
+	httpx.JSON(w, http.StatusNoContent, nil)
+}
+
+// ---------- daily check-ins ----------
+
+func (h *Handler) listCheckins(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+	q := r.URL.Query()
+	from, to := q.Get("from"), q.Get("to")
+	if _, err := time.Parse(dayLayout, from); err != nil {
+		httpx.Error(w, r, httpx.ErrBadRequest("from (YYYY-MM-DD) required"))
+		return
+	}
+	if _, err := time.Parse(dayLayout, to); err != nil {
+		httpx.Error(w, r, httpx.ErrBadRequest("to (YYYY-MM-DD) required"))
+		return
+	}
+	marks, err := h.svc.Checkins(r.Context(), auth.UserID(r.Context()), id, from, to)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	// Return only the marked days as {day: success}; the client fills the grid.
+	httpx.JSON(w, http.StatusOK, map[string]any{"days": marks})
+}
+
+type checkinReq struct {
+	Day     string `json:"day"`
+	Success bool   `json:"success"`
+}
+
+func (h *Handler) setCheckin(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+	var req checkinReq
+	if err := httpx.Decode(r, &req); err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	if _, err := time.Parse(dayLayout, req.Day); err != nil {
+		httpx.Error(w, r, httpx.ErrBadRequest("day must be YYYY-MM-DD"))
+		return
+	}
+	if err := h.svc.SetCheckin(r.Context(), auth.UserID(r.Context()), id, req.Day, req.Success); err != nil {
+		renderErr(w, r, err, "habit not found")
+		return
+	}
+	httpx.JSON(w, http.StatusNoContent, nil)
+}
+
+func (h *Handler) clearCheckin(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+	day := r.URL.Query().Get("day")
+	if _, err := time.Parse(dayLayout, day); err != nil {
+		httpx.Error(w, r, httpx.ErrBadRequest("day (YYYY-MM-DD) required"))
+		return
+	}
+	if err := h.svc.ClearCheckin(r.Context(), auth.UserID(r.Context()), id, day); err != nil {
 		renderErr(w, r, err, "habit not found")
 		return
 	}

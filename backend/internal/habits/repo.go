@@ -139,6 +139,79 @@ func (r *Repo) DeleteLog(ctx context.Context, userID, logID uuid.UUID) error {
 	return nil
 }
 
+// --- check-ins (daily tracker) ---
+
+type checkinRow struct {
+	HabitID uuid.UUID
+	Day     string
+	Success bool
+}
+
+// RecentCheckins returns every check-in on or after sinceDay across the user's
+// habits (for computing dashboard health + preview strips in one query).
+func (r *Repo) RecentCheckins(ctx context.Context, userID uuid.UUID, sinceDay string) ([]checkinRow, error) {
+	const q = `SELECT habit_id, to_char(day,'YYYY-MM-DD'), success FROM habit_checkins
+		WHERE user_id=$1 AND day >= $2::date`
+	rows, err := r.db.Read().Query(ctx, q, userID, sinceDay)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []checkinRow{}
+	for rows.Next() {
+		var c checkinRow
+		if err := rows.Scan(&c.HabitID, &c.Day, &c.Success); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// CheckinsRange returns one habit's check-ins in [from, to] (for the tracker).
+func (r *Repo) CheckinsRange(ctx context.Context, userID, habitID uuid.UUID, from, to string) (map[string]bool, error) {
+	const q = `SELECT to_char(day,'YYYY-MM-DD'), success FROM habit_checkins
+		WHERE user_id=$1 AND habit_id=$2 AND day BETWEEN $3::date AND $4::date`
+	rows, err := r.db.Read().Query(ctx, q, userID, habitID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var day string
+		var success bool
+		if err := rows.Scan(&day, &success); err != nil {
+			return nil, err
+		}
+		out[day] = success
+	}
+	return out, rows.Err()
+}
+
+// SetCheckin upserts a day's result, verifying the habit belongs to the user.
+func (r *Repo) SetCheckin(ctx context.Context, userID, habitID uuid.UUID, day string, success bool) error {
+	const q = `
+		INSERT INTO habit_checkins (user_id, habit_id, day, success)
+		SELECT $1, $2, $3::date, $4 WHERE EXISTS (SELECT 1 FROM habits WHERE id=$2 AND user_id=$1)
+		ON CONFLICT (habit_id, day) DO UPDATE SET success=$4, updated_at=now()`
+	ct, err := r.db.Pool.Exec(ctx, q, userID, habitID, day, success)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return postgres.ErrNotFound // habit not owned
+	}
+	return nil
+}
+
+// ClearCheckin removes a day's mark (untracked).
+func (r *Repo) ClearCheckin(ctx context.Context, userID, habitID uuid.UUID, day string) error {
+	_, err := r.db.Pool.Exec(ctx,
+		`DELETE FROM habit_checkins WHERE user_id=$1 AND habit_id=$2 AND day=$3::date`, userID, habitID, day)
+	return err
+}
+
 // Owns reports whether the habit exists and belongs to the user.
 func (r *Repo) Owns(ctx context.Context, userID, habitID uuid.UUID) (bool, error) {
 	var ok bool

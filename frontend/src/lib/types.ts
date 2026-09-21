@@ -368,6 +368,13 @@ export interface DiaryDateCount {
 
 export type HabitKind = "good" | "bad";
 export type HabitStatus = "" | "positive" | "negative";
+export type HabitColor = "green" | "yellow" | "red";
+export type CheckinStatus = "none" | "success" | "fail";
+
+export interface HabitRecentDay {
+  day: string;
+  status: CheckinStatus;
+}
 
 export interface Habit {
   id: string;
@@ -379,6 +386,11 @@ export interface Habit {
   logCount: number;
   lastStatus: HabitStatus;
   lastLogAt: string | null;
+  color: HabitColor;
+  fails: number;
+  successes: number;
+  streak: number;
+  recent: HabitRecentDay[];
   createdAt: string;
 }
 

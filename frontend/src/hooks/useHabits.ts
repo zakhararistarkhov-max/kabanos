@@ -1,13 +1,14 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, browserTZ } from "@/lib/api";
 import type { Habit, HabitKind, HabitLog, HabitReminder, HabitStatus } from "@/lib/types";
 
 export function useHabits() {
   return useQuery<{ items: Habit[] }>({
     queryKey: ["habits"],
-    queryFn: () => api("/habits"),
+    queryFn: () => api(`/habits?tz=${encodeURIComponent(browserTZ())}`),
+    refetchInterval: 5 * 60_000,
   });
 }
 
@@ -38,6 +39,33 @@ export function useDeleteHabit() {
   const invalidate = useInvalidate();
   return useMutation({
     mutationFn: (id: string) => api(`/habits/${id}`, { method: "DELETE" }),
+    onSuccess: invalidate,
+  });
+}
+
+// --- daily check-ins (tracker) ---
+
+export function useHabitCheckins(habitId: string, from: string, to: string) {
+  return useQuery<{ days: Record<string, boolean> }>({
+    queryKey: ["habits", "checkins", habitId, from, to],
+    queryFn: () => api(`/habits/${habitId}/checkins?from=${from}&to=${to}`),
+    enabled: Boolean(habitId && from && to),
+  });
+}
+
+export function useSetCheckin(habitId: string) {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (input: { day: string; success: boolean }) =>
+      api(`/habits/${habitId}/checkins`, { method: "PUT", body: JSON.stringify(input) }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useClearCheckin(habitId: string) {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (day: string) => api(`/habits/${habitId}/checkins?day=${day}`, { method: "DELETE" }),
     onSuccess: invalidate,
   });
 }

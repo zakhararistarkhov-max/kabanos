@@ -25,6 +25,20 @@ type Habit struct {
 	LogCount      int
 	LastStatus    string
 	LastLogAt     *time.Time
+	// Health (derived from recent check-ins):
+	Color     string    // green | yellow | red
+	Fails     int       // failed/missed days in the recent window
+	Successes int       // kept days in the recent window
+	Streak    int       // current consecutive-day success streak
+	Recent    []Checkin // the recent window (oldest→newest) for the preview strip
+}
+
+// Checkin is one day's result for a habit. Day is YYYY-MM-DD; Status is
+// "success" | "fail" | "none" (none = the day is within the window but unmarked).
+type Checkin struct {
+	Day     string `json:"day"`
+	Status  string `json:"status"`
+	Success bool   `json:"-"`
 }
 
 // Log is one mini-diary entry for a habit.
