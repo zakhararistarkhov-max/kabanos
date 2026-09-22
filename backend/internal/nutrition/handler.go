@@ -66,6 +66,7 @@ type macrosDTO struct {
 	Protein float64 `json:"protein"`
 	Fat     float64 `json:"fat"`
 	Carbs   float64 `json:"carbs"`
+	Fiber   float64 `json:"fiber"`
 }
 
 type ingredientDTO struct {
@@ -101,8 +102,8 @@ func (h *Handler) toDishDTO(r *http.Request, d *Dish, viewer uuid.UUID) dishDTO 
 		c := ing.Contribution()
 		ings = append(ings, ingredientDTO{
 			DishID: ing.DishID.String(), Name: ing.Name, Grams: ing.Grams,
-			Per100:       macrosDTO{ing.Per100.Kcal, ing.Per100.Protein, ing.Per100.Fat, ing.Per100.Carbs},
-			Contribution: macrosDTO{round1(c.Kcal), round1(c.Protein), round1(c.Fat), round1(c.Carbs)},
+			Per100:       macrosDTO{ing.Per100.Kcal, ing.Per100.Protein, ing.Per100.Fat, ing.Per100.Carbs, ing.Per100.Fiber},
+			Contribution: macrosDTO{round1(c.Kcal), round1(c.Protein), round1(c.Fat), round1(c.Carbs), round1(c.Fiber)},
 		})
 	}
 	return dishDTO{
@@ -111,7 +112,7 @@ func (h *Handler) toDishDTO(r *http.Request, d *Dish, viewer uuid.UUID) dishDTO 
 		Description:  d.Description,
 		Recipe:       d.Recipe,
 		ImageURL:     h.svc.ImageURL(r.Context(), d.ImageKey),
-		Per100:       macrosDTO{d.KcalPer100, d.ProteinPer100, d.FatPer100, d.CarbsPer100},
+		Per100:       macrosDTO{d.KcalPer100, d.ProteinPer100, d.FatPer100, d.CarbsPer100, d.FiberPer100},
 		ServingGrams: d.ServingGrams,
 		RatingAvg:    round1(d.AvgRating()),
 		RatingCount:  d.RatingCount,
@@ -149,6 +150,7 @@ type setGoalRequest struct {
 	Protein float64 `json:"protein"`
 	Fat     float64 `json:"fat"`
 	Carbs   float64 `json:"carbs"`
+	Fiber   float64 `json:"fiber"`
 }
 
 func (h *Handler) setGoal(w http.ResponseWriter, r *http.Request) {
@@ -159,13 +161,13 @@ func (h *Handler) setGoal(w http.ResponseWriter, r *http.Request) {
 	}
 	v := validate.New()
 	v.Check(req.Kcal > 0 && req.Kcal <= 20000, "kcal", "must be between 1 and 20000")
-	v.Check(req.Protein >= 0 && req.Fat >= 0 && req.Carbs >= 0, "macros", "must be non-negative")
+	v.Check(req.Protein >= 0 && req.Fat >= 0 && req.Carbs >= 0 && req.Fiber >= 0, "macros", "must be non-negative")
 	if !v.Valid() {
 		httpx.Error(w, r, httpx.ValidationError(v.Errors))
 		return
 	}
 	g, err := h.svc.SetGoal(r.Context(), auth.UserID(r.Context()),
-		Goal{Kcal: req.Kcal, Protein: req.Protein, Fat: req.Fat, Carbs: req.Carbs})
+		Goal{Kcal: req.Kcal, Protein: req.Protein, Fat: req.Fat, Carbs: req.Carbs, Fiber: req.Fiber})
 	if err != nil {
 		httpx.Error(w, r, err)
 		return
@@ -174,7 +176,7 @@ func (h *Handler) setGoal(w http.ResponseWriter, r *http.Request) {
 }
 
 func goalToMap(g Goal) map[string]any {
-	return map[string]any{"kcal": g.Kcal, "protein": g.Protein, "fat": g.Fat, "carbs": g.Carbs}
+	return map[string]any{"kcal": g.Kcal, "protein": g.Protein, "fat": g.Fat, "carbs": g.Carbs, "fiber": g.Fiber}
 }
 
 // ---------- day & history ----------
@@ -254,6 +256,7 @@ type addManualRequest struct {
 	Protein    float64    `json:"protein"`
 	Fat        float64    `json:"fat"`
 	Carbs      float64    `json:"carbs"`
+	Fiber      float64    `json:"fiber"`
 	Meal       *string    `json:"meal"`
 	ConsumedAt *time.Time `json:"consumedAt"`
 }
@@ -311,7 +314,7 @@ func (h *Handler) addManual(w http.ResponseWriter, r *http.Request) {
 	v := validate.New()
 	v.Required("name", req.Name)
 	v.MaxLen("name", req.Name, 140)
-	v.Check(req.Kcal >= 0 && req.Protein >= 0 && req.Fat >= 0 && req.Carbs >= 0, "macros", "must be non-negative")
+	v.Check(req.Kcal >= 0 && req.Protein >= 0 && req.Fat >= 0 && req.Carbs >= 0 && req.Fiber >= 0, "macros", "must be non-negative")
 	if req.Meal != nil {
 		v.Check(validMeal(*req.Meal), "meal", "invalid meal")
 	}
@@ -320,7 +323,7 @@ func (h *Handler) addManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e, err := h.svc.AddManualEntry(r.Context(), auth.UserID(r.Context()), req.Name,
-		Macros{Kcal: req.Kcal, Protein: req.Protein, Fat: req.Fat, Carbs: req.Carbs}, req.Meal, req.ConsumedAt)
+		Macros{Kcal: req.Kcal, Protein: req.Protein, Fat: req.Fat, Carbs: req.Carbs, Fiber: req.Fiber}, req.Meal, req.ConsumedAt)
 	if err != nil {
 		httpx.Error(w, r, err)
 		return
@@ -378,6 +381,7 @@ type dishRequest struct {
 	ProteinPer100 float64         `json:"proteinPer100"`
 	FatPer100     float64         `json:"fatPer100"`
 	CarbsPer100   float64         `json:"carbsPer100"`
+	FiberPer100   float64         `json:"fiberPer100"`
 	ServingGrams  *float64        `json:"servingGrams"`
 	Ingredients   []ingredientReq `json:"ingredients"`
 }
@@ -406,7 +410,7 @@ func (req *dishRequest) validated() ([]IngredientInput, *httpx.APIError) {
 
 	if len(ingredients) == 0 {
 		v.Check(req.KcalPer100 >= 0 && req.KcalPer100 <= 1000, "kcalPer100", "must be between 0 and 1000")
-		v.Check(req.ProteinPer100 >= 0 && req.FatPer100 >= 0 && req.CarbsPer100 >= 0, "macros", "must be non-negative")
+		v.Check(req.ProteinPer100 >= 0 && req.FatPer100 >= 0 && req.CarbsPer100 >= 0 && req.FiberPer100 >= 0, "macros", "must be non-negative")
 		if req.ServingGrams != nil {
 			v.Check(*req.ServingGrams > 0 && *req.ServingGrams <= 5000, "servingGrams", "must be between 1 and 5000")
 		}
@@ -432,7 +436,7 @@ func (h *Handler) createDish(w http.ResponseWriter, r *http.Request) {
 	d, err := h.svc.CreateDish(r.Context(), &Dish{
 		CreatedBy: viewer, Name: req.Name, Description: req.Description, Recipe: req.Recipe,
 		ImageKey: req.ImageKey, KcalPer100: req.KcalPer100, ProteinPer100: req.ProteinPer100,
-		FatPer100: req.FatPer100, CarbsPer100: req.CarbsPer100, ServingGrams: req.ServingGrams,
+		FatPer100: req.FatPer100, CarbsPer100: req.CarbsPer100, FiberPer100: req.FiberPer100, ServingGrams: req.ServingGrams,
 	}, ingredients)
 	if err != nil {
 		h.renderDishSaveErr(w, r, err, "")
@@ -488,7 +492,7 @@ func (h *Handler) updateDish(w http.ResponseWriter, r *http.Request) {
 	d, err := h.svc.UpdateDish(r.Context(), &Dish{
 		ID: id, Name: req.Name, Description: req.Description, Recipe: req.Recipe,
 		ImageKey: req.ImageKey, KcalPer100: req.KcalPer100, ProteinPer100: req.ProteinPer100,
-		FatPer100: req.FatPer100, CarbsPer100: req.CarbsPer100, ServingGrams: req.ServingGrams,
+		FatPer100: req.FatPer100, CarbsPer100: req.CarbsPer100, FiberPer100: req.FiberPer100, ServingGrams: req.ServingGrams,
 	}, ingredients, viewer)
 	if err != nil {
 		h.renderDishSaveErr(w, r, err, "dish not found or not yours")

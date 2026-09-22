@@ -9,32 +9,34 @@ import (
 	"github.com/google/uuid"
 )
 
-// Macros is the reusable calories + protein/fat/carbs tuple.
+// Macros is the reusable calories + protein/fat/carbs/fiber tuple.
 type Macros struct {
 	Kcal    float64 `json:"kcal"`
 	Protein float64 `json:"protein"`
 	Fat     float64 `json:"fat"`
 	Carbs   float64 `json:"carbs"`
+	Fiber   float64 `json:"fiber"`
 }
 
 // Dish is a catalog item. Macro fields are per 100 g.
 type Dish struct {
-	ID             uuid.UUID
-	CreatedBy      uuid.UUID
-	Name           string
-	Description    string
-	Recipe         string
-	ImageKey       *string
-	KcalPer100     float64
-	ProteinPer100  float64
-	FatPer100      float64
-	CarbsPer100    float64
-	ServingGrams   *float64
-	IsPublic       bool
-	RatingCount    int
-	RatingSum      int
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID            uuid.UUID
+	CreatedBy     uuid.UUID
+	Name          string
+	Description   string
+	Recipe        string
+	ImageKey      *string
+	KcalPer100    float64
+	ProteinPer100 float64
+	FatPer100     float64
+	CarbsPer100   float64
+	FiberPer100   float64
+	ServingGrams  *float64
+	IsPublic      bool
+	RatingCount   int
+	RatingSum     int
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 	// Populated for list/detail responses (viewer-specific).
 	AuthorName string
 	IsFavorite bool
@@ -65,7 +67,7 @@ type Ingredient struct {
 // its grams).
 func (i Ingredient) Contribution() Macros {
 	f := i.Grams / 100.0
-	return Macros{Kcal: i.Per100.Kcal * f, Protein: i.Per100.Protein * f, Fat: i.Per100.Fat * f, Carbs: i.Per100.Carbs * f}
+	return Macros{Kcal: i.Per100.Kcal * f, Protein: i.Per100.Protein * f, Fat: i.Per100.Fat * f, Carbs: i.Per100.Carbs * f, Fiber: i.Per100.Fiber * f}
 }
 
 // IngredientInput is a component supplied when creating/updating a dish.
@@ -88,20 +90,21 @@ type Goal struct {
 	Protein   float64   `json:"protein"`
 	Fat       float64   `json:"fat"`
 	Carbs     float64   `json:"carbs"`
+	Fiber     float64   `json:"fiber"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // DietEntry is one logged food item with a macro snapshot (authoritative even
 // if the source dish later changes).
 type DietEntry struct {
-	ID         uuid.UUID `json:"id"`
+	ID         uuid.UUID  `json:"id"`
 	DishID     *uuid.UUID `json:"dishId"`
-	Name       string    `json:"name"`
-	Grams      *float64  `json:"grams"`
-	Meal       *string   `json:"meal"`
-	Source     string    `json:"source"`
-	Macros     Macros    `json:"macros"`
-	ConsumedAt time.Time `json:"consumedAt"`
+	Name       string     `json:"name"`
+	Grams      *float64   `json:"grams"`
+	Meal       *string    `json:"meal"`
+	Source     string     `json:"source"`
+	Macros     Macros     `json:"macros"`
+	ConsumedAt time.Time  `json:"consumedAt"`
 }
 
 type Activity struct {
@@ -116,14 +119,14 @@ type Activity struct {
 
 // DaySummary is the payload for the daily diet screen.
 type DaySummary struct {
-	Date        string      `json:"date"`
-	Goal        Goal        `json:"goal"`
-	Consumed    Macros      `json:"consumed"`
-	BurnedKcal  float64     `json:"burnedKcal"`
-	NetKcal     float64     `json:"netKcal"`     // consumed − burned
-	RemainingKcal float64   `json:"remainingKcal"` // goal − net (negative = surplus)
-	Entries     []DietEntry `json:"entries"`
-	Activities  []Activity  `json:"activities"`
+	Date          string      `json:"date"`
+	Goal          Goal        `json:"goal"`
+	Consumed      Macros      `json:"consumed"`
+	BurnedKcal    float64     `json:"burnedKcal"`
+	NetKcal       float64     `json:"netKcal"`       // consumed − burned
+	RemainingKcal float64     `json:"remainingKcal"` // goal − net (negative = surplus)
+	Entries       []DietEntry `json:"entries"`
+	Activities    []Activity  `json:"activities"`
 }
 
 // DayTotals is one point in the history chart.
@@ -133,6 +136,7 @@ type DayTotals struct {
 	Protein    float64 `json:"protein"`
 	Fat        float64 `json:"fat"`
 	Carbs      float64 `json:"carbs"`
+	Fiber      float64 `json:"fiber"`
 	BurnedKcal float64 `json:"burnedKcal"`
 }
 

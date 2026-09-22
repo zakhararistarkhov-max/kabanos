@@ -157,11 +157,12 @@ export default function NutritionPage() {
       {d ? (
         <>
           {/* balance */}
-          <div className="grid gap-4 sm:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
             <MacroCard label="Калории" value={d.consumed.kcal} goal={d.goal.kcal} unit="ккал" accent="brand" />
             <MacroCard label="Белки" value={d.consumed.protein} goal={d.goal.protein} unit="г" accent="good" />
             <MacroCard label="Жиры" value={d.consumed.fat} goal={d.goal.fat} unit="г" accent="warn" />
             <MacroCard label="Углеводы" value={d.consumed.carbs} goal={d.goal.carbs} unit="г" accent="brand" />
+            <MacroCard label="Клетчатка" value={d.consumed.fiber} goal={d.goal.fiber} unit="г" accent="good" />
           </div>
 
           <div className="card flex flex-wrap items-center justify-between gap-4">
@@ -274,8 +275,8 @@ export default function NutritionPage() {
                           {e.name} {e.grams ? <span className="text-ink-500">· {e.grams} г</span> : null}
                         </div>
                         <div className="text-ink-500">
-                          {Math.round(e.macros.kcal)} ккал · Б {e.macros.protein} · Ж {e.macros.fat} · У {e.macros.carbs} ·{" "}
-                          {hhmm(e.consumedAt)}
+                          {Math.round(e.macros.kcal)} ккал · Б {e.macros.protein} · Ж {e.macros.fat} · У {e.macros.carbs}
+                          {e.macros.fiber ? ` · Кл ${e.macros.fiber}` : ""} · {hhmm(e.consumedAt)}
                         </div>
                       </div>
                       <button onClick={() => deleteEntry.mutate(e.id)} className="text-ink-500 hover:text-bad">
@@ -497,25 +498,26 @@ function Balance({ label, value, muted }: { label: string; value: string; muted?
   );
 }
 
-function ManualFoodForm({ onAdd, pending }: { onAdd: (v: { name: string; kcal: number; protein: number; fat: number; carbs: number; meal?: Meal }) => void; pending: boolean }) {
-  const [f, setF] = useState({ name: "", kcal: "", protein: "", fat: "", carbs: "" });
+function ManualFoodForm({ onAdd, pending }: { onAdd: (v: { name: string; kcal: number; protein: number; fat: number; carbs: number; fiber: number; meal?: Meal }) => void; pending: boolean }) {
+  const [f, setF] = useState({ name: "", kcal: "", protein: "", fat: "", carbs: "", fiber: "" });
   const [meal, setMeal] = useState<Meal | "">("");
 
   function submit() {
     if (!f.name.trim() || num(f.kcal) <= 0) return;
-    onAdd({ name: f.name.trim(), kcal: num(f.kcal), protein: num(f.protein), fat: num(f.fat), carbs: num(f.carbs), meal: meal || undefined });
-    setF({ name: "", kcal: "", protein: "", fat: "", carbs: "" });
+    onAdd({ name: f.name.trim(), kcal: num(f.kcal), protein: num(f.protein), fat: num(f.fat), carbs: num(f.carbs), fiber: num(f.fiber), meal: meal || undefined });
+    setF({ name: "", kcal: "", protein: "", fat: "", carbs: "", fiber: "" });
   }
 
   return (
     <div className="card space-y-3">
       <h2 className="font-semibold">Добавить вручную</h2>
       <Field label="Название" name="name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-5 gap-2">
         <Field label="Ккал" name="kcal" inputMode="decimal" value={f.kcal} onChange={(e) => setF({ ...f, kcal: e.target.value })} />
         <Field label="Б" name="protein" inputMode="decimal" value={f.protein} onChange={(e) => setF({ ...f, protein: e.target.value })} />
         <Field label="Ж" name="fat" inputMode="decimal" value={f.fat} onChange={(e) => setF({ ...f, fat: e.target.value })} />
         <Field label="У" name="carbs" inputMode="decimal" value={f.carbs} onChange={(e) => setF({ ...f, carbs: e.target.value })} />
+        <Field label="Кл" name="fiber" inputMode="decimal" value={f.fiber} onChange={(e) => setF({ ...f, fiber: e.target.value })} />
       </div>
       <div className="flex items-end gap-2">
         <div className="flex-1">
@@ -606,26 +608,27 @@ function ActivityForm({
   );
 }
 
-function GoalEditor({ goal, onSave, pending }: { goal: { kcal: number; protein: number; fat: number; carbs: number }; onSave: (g: { kcal: number; protein: number; fat: number; carbs: number }) => void; pending: boolean }) {
+function GoalEditor({ goal, onSave, pending }: { goal: { kcal: number; protein: number; fat: number; carbs: number; fiber: number }; onSave: (g: { kcal: number; protein: number; fat: number; carbs: number; fiber: number }) => void; pending: boolean }) {
   const [open, setOpen] = useState(false);
-  const [g, setG] = useState({ kcal: String(goal.kcal), protein: String(goal.protein), fat: String(goal.fat), carbs: String(goal.carbs) });
+  const [g, setG] = useState({ kcal: String(goal.kcal), protein: String(goal.protein), fat: String(goal.fat), carbs: String(goal.carbs), fiber: String(goal.fiber) });
 
   return (
     <div className="card">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between font-semibold">
         <span>🎯 Цели по КБЖУ</span>
         <span className="text-sm text-ink-500">
-          {goal.kcal} ккал · Б{goal.protein} Ж{goal.fat} У{goal.carbs} {open ? "▲" : "▼"}
+          {goal.kcal} ккал · Б{goal.protein} Ж{goal.fat} У{goal.carbs} Кл{goal.fiber} {open ? "▲" : "▼"}
         </span>
       </button>
       {open ? (
-        <div className="mt-4 grid grid-cols-2 items-end gap-3 sm:grid-cols-5">
+        <div className="mt-4 grid grid-cols-2 items-end gap-3 sm:grid-cols-6">
           <Field label="Ккал" name="gkcal" inputMode="numeric" value={g.kcal} onChange={(e) => setG({ ...g, kcal: e.target.value })} />
           <Field label="Белки" name="gp" inputMode="decimal" value={g.protein} onChange={(e) => setG({ ...g, protein: e.target.value })} />
           <Field label="Жиры" name="gf" inputMode="decimal" value={g.fat} onChange={(e) => setG({ ...g, fat: e.target.value })} />
           <Field label="Углеводы" name="gc" inputMode="decimal" value={g.carbs} onChange={(e) => setG({ ...g, carbs: e.target.value })} />
+          <Field label="Клетчатка" name="gfib" inputMode="decimal" value={g.fiber} onChange={(e) => setG({ ...g, fiber: e.target.value })} />
           <button
-            onClick={() => onSave({ kcal: Math.round(num(g.kcal)), protein: num(g.protein), fat: num(g.fat), carbs: num(g.carbs) })}
+            onClick={() => onSave({ kcal: Math.round(num(g.kcal)), protein: num(g.protein), fat: num(g.fat), carbs: num(g.carbs), fiber: num(g.fiber) })}
             disabled={pending}
             className="btn-primary"
           >

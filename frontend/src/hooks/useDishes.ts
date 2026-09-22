@@ -40,6 +40,7 @@ export interface DishInput {
   proteinPer100: number;
   fatPer100: number;
   carbsPer100: number;
+  fiberPer100: number;
   servingGrams?: number | null;
   // When present, the dish is composed of other dishes and its macros are
   // computed server-side from these.

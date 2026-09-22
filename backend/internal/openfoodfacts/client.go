@@ -29,6 +29,7 @@ type Product struct {
 	ProteinPer100 float64
 	FatPer100     float64
 	CarbsPer100   float64
+	FiberPer100   float64
 	ServingGrams  *float64
 }
 
@@ -119,6 +120,7 @@ func normalize(barcode string, r offResponse) *Product {
 	p.ProteinPer100 = round1(numField(n, "proteins_100g"))
 	p.FatPer100 = round1(numField(n, "fat_100g"))
 	p.CarbsPer100 = round1(numField(n, "carbohydrates_100g"))
+	p.FiberPer100 = round1(numField(n, "fiber_100g"))
 
 	if g := toFloat(r.Product.ServingQty); g > 0 {
 		gg := round1(g)

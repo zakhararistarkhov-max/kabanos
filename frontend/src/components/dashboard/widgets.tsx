@@ -158,6 +158,7 @@ function MacrosWidget() {
         { label: "Белки", v: d.consumed.protein, g: d.goal.protein, color: "bg-good" },
         { label: "Жиры", v: d.consumed.fat, g: d.goal.fat, color: "bg-warn" },
         { label: "Углеводы", v: d.consumed.carbs, g: d.goal.carbs, color: "bg-brand" },
+        { label: "Клетчатка", v: d.consumed.fiber, g: d.goal.fiber, color: "bg-good" },
       ]
     : [];
   return (

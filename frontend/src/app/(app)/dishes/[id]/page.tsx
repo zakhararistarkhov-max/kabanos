@@ -68,6 +68,7 @@ export default function DishDetailPage() {
       protein: +(d.per100g.protein * f).toFixed(1),
       fat: +(d.per100g.fat * f).toFixed(1),
       carbs: +(d.per100g.carbs * f).toFixed(1),
+      fiber: +(d.per100g.fiber * f).toFixed(1),
     };
   }, [d, previewGrams]);
 
@@ -132,11 +133,12 @@ export default function DishDetailPage() {
               ) : null}
               {d.description ? <p className="mt-3 text-ink-300">{d.description}</p> : null}
 
-              <div className="mt-4 grid grid-cols-4 gap-2 text-center">
+              <div className="mt-4 grid grid-cols-5 gap-2 text-center">
                 <Nutri label="Ккал" value={d.per100g.kcal} />
                 <Nutri label="Белки" value={d.per100g.protein} />
                 <Nutri label="Жиры" value={d.per100g.fat} />
                 <Nutri label="Углев." value={d.per100g.carbs} />
+                <Nutri label="Клетч." value={d.per100g.fiber} />
               </div>
               <p className="mt-1 text-center text-xs text-ink-500">на 100 г{d.servingGrams ? ` · порция ${d.servingGrams} г` : ""}</p>
 
@@ -167,7 +169,7 @@ export default function DishDetailPage() {
                       <span className="ml-2 text-ink-500">{ing.grams} г</span>
                     </div>
                     <div className="shrink-0 text-right text-ink-500">
-                      {Math.round(ing.contribution.kcal)} ккал · Б{ing.contribution.protein} Ж{ing.contribution.fat} У{ing.contribution.carbs}
+                      {Math.round(ing.contribution.kcal)} ккал · Б{ing.contribution.protein} Ж{ing.contribution.fat} У{ing.contribution.carbs} Кл{ing.contribution.fiber}
                     </div>
                   </li>
                 ))}
@@ -239,8 +241,8 @@ export default function DishDetailPage() {
             </div>
             {preview ? (
               <div className="rounded-xl bg-ink-800/50 px-3 py-2 text-sm text-ink-300">
-                ≈ <span className="font-semibold text-ink-100">{preview.kcal} ккал</span> · Б {preview.protein} · Ж {preview.fat} · У{" "}
-                {preview.carbs} <span className="text-ink-500">({Math.round(previewGrams)} г)</span>
+                ≈ <span className="font-semibold text-ink-100">{preview.kcal} ккал</span> · Б {preview.protein} · Ж {preview.fat} · У {preview.carbs} · Кл{" "}
+                {preview.fiber} <span className="text-ink-500">({Math.round(previewGrams)} г)</span>
               </div>
             ) : null}
             <button onClick={submitToDiet} disabled={addToDiet.isPending || previewGrams <= 0} className="btn-primary w-full">

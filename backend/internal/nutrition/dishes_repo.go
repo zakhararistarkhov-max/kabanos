@@ -20,7 +20,7 @@ func NewDishRepo(db *postgres.DB) *DishRepo { return &DishRepo{db: db} }
 // dishColumns selects a dish plus viewer-specific flags. $1 must be the viewer id.
 const dishColumns = `
 	d.id, d.created_by, d.name, d.description, d.recipe, d.image_key,
-	d.kcal_per_100g::float8, d.protein_per_100g::float8, d.fat_per_100g::float8, d.carbs_per_100g::float8,
+	d.kcal_per_100g::float8, d.protein_per_100g::float8, d.fat_per_100g::float8, d.carbs_per_100g::float8, d.fiber_per_100g::float8,
 	d.serving_grams::float8, d.is_public, d.rating_count, d.rating_sum, d.created_at, d.updated_at,
 	u.display_name,
 	EXISTS(SELECT 1 FROM dish_favorites f WHERE f.dish_id = d.id AND f.user_id = $1) AS is_favorite,
@@ -30,7 +30,7 @@ func scanDish(row pgx.Row) (*Dish, error) {
 	var d Dish
 	err := row.Scan(
 		&d.ID, &d.CreatedBy, &d.Name, &d.Description, &d.Recipe, &d.ImageKey,
-		&d.KcalPer100, &d.ProteinPer100, &d.FatPer100, &d.CarbsPer100,
+		&d.KcalPer100, &d.ProteinPer100, &d.FatPer100, &d.CarbsPer100, &d.FiberPer100,
 		&d.ServingGrams, &d.IsPublic, &d.RatingCount, &d.RatingSum, &d.CreatedAt, &d.UpdatedAt,
 		&d.AuthorName, &d.IsFavorite, &d.MyRating,
 	)
@@ -55,12 +55,12 @@ func (r *DishRepo) Create(ctx context.Context, d *Dish, ingredients []Ingredient
 		}
 		const q = `
 			INSERT INTO dishes (created_by, name, description, recipe, image_key,
-				kcal_per_100g, protein_per_100g, fat_per_100g, carbs_per_100g, serving_grams)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+				kcal_per_100g, protein_per_100g, fat_per_100g, carbs_per_100g, fiber_per_100g, serving_grams)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 			RETURNING id`
 		if err := tx.QueryRow(ctx, q,
 			d.CreatedBy, d.Name, d.Description, d.Recipe, d.ImageKey,
-			d.KcalPer100, d.ProteinPer100, d.FatPer100, d.CarbsPer100, d.ServingGrams,
+			d.KcalPer100, d.ProteinPer100, d.FatPer100, d.CarbsPer100, d.FiberPer100, d.ServingGrams,
 		).Scan(&id); err != nil {
 			return err
 		}
@@ -91,7 +91,7 @@ func (r *DishRepo) GetByID(ctx context.Context, id, viewerID uuid.UUID) (*Dish, 
 func (r *DishRepo) listIngredients(ctx context.Context, dishID uuid.UUID) ([]Ingredient, error) {
 	const q = `
 		SELECT di.ingredient_dish_id, d.name, di.grams::float8,
-			d.kcal_per_100g::float8, d.protein_per_100g::float8, d.fat_per_100g::float8, d.carbs_per_100g::float8
+			d.kcal_per_100g::float8, d.protein_per_100g::float8, d.fat_per_100g::float8, d.carbs_per_100g::float8, d.fiber_per_100g::float8
 		FROM dish_ingredients di JOIN dishes d ON d.id = di.ingredient_dish_id
 		WHERE di.dish_id = $1 ORDER BY di.position`
 	rows, err := r.db.Read().Query(ctx, q, dishID)
@@ -103,7 +103,7 @@ func (r *DishRepo) listIngredients(ctx context.Context, dishID uuid.UUID) ([]Ing
 	for rows.Next() {
 		var ing Ingredient
 		if err := rows.Scan(&ing.DishID, &ing.Name, &ing.Grams,
-			&ing.Per100.Kcal, &ing.Per100.Protein, &ing.Per100.Fat, &ing.Per100.Carbs); err != nil {
+			&ing.Per100.Kcal, &ing.Per100.Protein, &ing.Per100.Fat, &ing.Per100.Carbs, &ing.Per100.Fiber); err != nil {
 			return nil, err
 		}
 		out = append(out, ing)
@@ -121,7 +121,7 @@ func applyIngredientMacros(ctx context.Context, tx pgx.Tx, d *Dish, ingredients 
 	}
 	per100 := map[uuid.UUID]Macros{}
 	rows, err := tx.Query(ctx, `
-		SELECT id, kcal_per_100g::float8, protein_per_100g::float8, fat_per_100g::float8, carbs_per_100g::float8
+		SELECT id, kcal_per_100g::float8, protein_per_100g::float8, fat_per_100g::float8, carbs_per_100g::float8, fiber_per_100g::float8
 		FROM dishes WHERE id = ANY($1)`, ids)
 	if err != nil {
 		return err
@@ -130,7 +130,7 @@ func applyIngredientMacros(ctx context.Context, tx pgx.Tx, d *Dish, ingredients 
 	for rows.Next() {
 		var id uuid.UUID
 		var m Macros
-		if err := rows.Scan(&id, &m.Kcal, &m.Protein, &m.Fat, &m.Carbs); err != nil {
+		if err := rows.Scan(&id, &m.Kcal, &m.Protein, &m.Fat, &m.Carbs, &m.Fiber); err != nil {
 			return err
 		}
 		per100[id] = m
@@ -151,6 +151,7 @@ func applyIngredientMacros(ctx context.Context, tx pgx.Tx, d *Dish, ingredients 
 		total.Protein += m.Protein * f
 		total.Fat += m.Fat * f
 		total.Carbs += m.Carbs * f
+		total.Fiber += m.Fiber * f
 		totalG += ing.Grams
 	}
 	if totalG <= 0 {
@@ -161,6 +162,7 @@ func applyIngredientMacros(ctx context.Context, tx pgx.Tx, d *Dish, ingredients 
 	d.ProteinPer100 = round2(total.Protein * scale)
 	d.FatPer100 = round2(total.Fat * scale)
 	d.CarbsPer100 = round2(total.Carbs * scale)
+	d.FiberPer100 = round2(total.Fiber * scale)
 	g := round2(totalG)
 	d.ServingGrams = &g
 	return nil
@@ -191,11 +193,11 @@ func (r *DishRepo) Update(ctx context.Context, d *Dish, ingredients []Ingredient
 		// key) preserves the existing one rather than clearing it.
 		const q = `
 			UPDATE dishes SET name=$3, description=$4, recipe=$5, image_key=COALESCE($6, image_key),
-				kcal_per_100g=$7, protein_per_100g=$8, fat_per_100g=$9, carbs_per_100g=$10,
-				serving_grams=$11, updated_at=now()
+				kcal_per_100g=$7, protein_per_100g=$8, fat_per_100g=$9, carbs_per_100g=$10, fiber_per_100g=$11,
+				serving_grams=$12, updated_at=now()
 			WHERE id=$1 AND created_by=$2`
 		ct, err := tx.Exec(ctx, q, d.ID, ownerID, d.Name, d.Description, d.Recipe, d.ImageKey,
-			d.KcalPer100, d.ProteinPer100, d.FatPer100, d.CarbsPer100, d.ServingGrams)
+			d.KcalPer100, d.ProteinPer100, d.FatPer100, d.CarbsPer100, d.FiberPer100, d.ServingGrams)
 		if err != nil {
 			return err
 		}

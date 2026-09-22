@@ -71,7 +71,7 @@ func (s *Service) LookupBarcode(ctx context.Context, barcode string) (*BarcodePr
 	}
 	product := BarcodeProduct{
 		Barcode: p.Barcode, Name: p.Name, Brand: p.Brand, ImageURL: p.ImageURL,
-		Per100:       Macros{Kcal: p.KcalPer100, Protein: p.ProteinPer100, Fat: p.FatPer100, Carbs: p.CarbsPer100},
+		Per100:       Macros{Kcal: p.KcalPer100, Protein: p.ProteinPer100, Fat: p.FatPer100, Carbs: p.CarbsPer100, Fiber: p.FiberPer100},
 		ServingGrams: p.ServingGrams, Source: "openfoodfacts",
 	}
 	if err := s.barcodes.Put(ctx, product); err != nil {
@@ -82,7 +82,7 @@ func (s *Service) LookupBarcode(ctx context.Context, barcode string) (*BarcodePr
 }
 
 // defaultGoal is a reasonable placeholder split (25/30/45 P/F/C at 2000 kcal).
-func defaultGoal() Goal { return Goal{Kcal: 2000, Protein: 125, Fat: 67, Carbs: 225} }
+func defaultGoal() Goal { return Goal{Kcal: 2000, Protein: 125, Fat: 67, Carbs: 225, Fiber: 30} }
 
 // --- goals ---
 
@@ -195,6 +195,7 @@ func scaleMacros(dish *Dish, factor float64) Macros {
 		Protein: round1(dish.ProteinPer100 * factor),
 		Fat:     round1(dish.FatPer100 * factor),
 		Carbs:   round1(dish.CarbsPer100 * factor),
+		Fiber:   round1(dish.FiberPer100 * factor),
 	}
 }
 
@@ -204,7 +205,7 @@ func (s *Service) AddManualEntry(ctx context.Context, userID uuid.UUID, name str
 		Name:       name,
 		Meal:       meal,
 		Source:     "manual",
-		Macros:     Macros{Kcal: math.Round(m.Kcal), Protein: round1(m.Protein), Fat: round1(m.Fat), Carbs: round1(m.Carbs)},
+		Macros:     Macros{Kcal: math.Round(m.Kcal), Protein: round1(m.Protein), Fat: round1(m.Fat), Carbs: round1(m.Carbs), Fiber: round1(m.Fiber)},
 		ConsumedAt: at(consumedAt),
 	}
 	return s.log.AddDietEntry(ctx, userID, entry)
@@ -290,6 +291,7 @@ func (s *Service) DaySummary(ctx context.Context, userID uuid.UUID, date, tz str
 		consumed.Protein += e.Macros.Protein
 		consumed.Fat += e.Macros.Fat
 		consumed.Carbs += e.Macros.Carbs
+		consumed.Fiber += e.Macros.Fiber
 	}
 	var burned float64
 	for _, a := range activities {
@@ -376,7 +378,7 @@ func at(t *time.Time) time.Time {
 func round1(f float64) float64 { return math.Round(f*10) / 10 }
 
 func roundMacros(m Macros) Macros {
-	return Macros{Kcal: math.Round(m.Kcal), Protein: round1(m.Protein), Fat: round1(m.Fat), Carbs: round1(m.Carbs)}
+	return Macros{Kcal: math.Round(m.Kcal), Protein: round1(m.Protein), Fat: round1(m.Fat), Carbs: round1(m.Carbs), Fiber: round1(m.Fiber)}
 }
 
 func roundDay(d DayTotals) DayTotals {
@@ -384,6 +386,7 @@ func roundDay(d DayTotals) DayTotals {
 	d.Protein = round1(d.Protein)
 	d.Fat = round1(d.Fat)
 	d.Carbs = round1(d.Carbs)
+	d.Fiber = round1(d.Fiber)
 	d.BurnedKcal = math.Round(d.BurnedKcal)
 	return d
 }

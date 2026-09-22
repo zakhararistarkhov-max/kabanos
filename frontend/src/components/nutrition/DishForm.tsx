@@ -38,6 +38,7 @@ export function DishForm({ initial, submitLabel, onSubmit }: Props) {
     protein: initial ? String(initial.per100g.protein) : "",
     fat: initial ? String(initial.per100g.fat) : "",
     carbs: initial ? String(initial.per100g.carbs) : "",
+    fiber: initial ? String(initial.per100g.fiber) : "",
     serving: initial?.servingGrams != null ? String(initial.servingGrams) : "",
   });
   const [imageKey, setImageKey] = useState<string | null>(null);
@@ -60,7 +61,7 @@ export function DishForm({ initial, submitLabel, onSubmit }: Props) {
 
   // Live totals computed from ingredients, mirroring the server calculation.
   const totals = useMemo(() => {
-    let g = 0, kcal = 0, p = 0, fat = 0, c = 0;
+    let g = 0, kcal = 0, p = 0, fat = 0, c = 0, fib = 0;
     for (const it of ingredients) {
       const gr = num(it.grams);
       const k = gr / 100;
@@ -69,6 +70,7 @@ export function DishForm({ initial, submitLabel, onSubmit }: Props) {
       p += it.per100g.protein * k;
       fat += it.per100g.fat * k;
       c += it.per100g.carbs * k;
+      fib += it.per100g.fiber * k;
     }
     const per = (x: number) => (g > 0 ? +((x / g) * 100).toFixed(1) : 0);
     return {
@@ -77,7 +79,8 @@ export function DishForm({ initial, submitLabel, onSubmit }: Props) {
       protein: +p.toFixed(1),
       fat: +fat.toFixed(1),
       carbs: +c.toFixed(1),
-      per100: { kcal: Math.round(per(kcal)), protein: per(p), fat: per(fat), carbs: per(c) },
+      fiber: +fib.toFixed(1),
+      per100: { kcal: Math.round(per(kcal)), protein: per(p), fat: per(fat), carbs: per(c), fiber: per(fib) },
     };
   }, [ingredients]);
 
@@ -126,6 +129,7 @@ export function DishForm({ initial, submitLabel, onSubmit }: Props) {
       proteinPer100: composed ? 0 : num(f.protein),
       fatPer100: composed ? 0 : num(f.fat),
       carbsPer100: composed ? 0 : num(f.carbs),
+      fiberPer100: composed ? 0 : num(f.fiber),
       servingGrams: composed ? null : f.serving ? num(f.serving) : null,
       ingredients: composed ? ingredients.map((i) => ({ dishId: i.dishId, grams: num(i.grams) })) : undefined,
     };
@@ -211,7 +215,7 @@ export function DishForm({ initial, submitLabel, onSubmit }: Props) {
 
         {composed ? (
           <div className="mt-3 rounded-lg bg-brand/10 px-3 py-2 text-sm text-ink-200">
-            Рассчитано: <span className="font-semibold">{totals.per100.kcal} ккал / 100 г</span> · Б {totals.per100.protein} Ж {totals.per100.fat} У {totals.per100.carbs}
+            Рассчитано: <span className="font-semibold">{totals.per100.kcal} ккал / 100 г</span> · Б {totals.per100.protein} Ж {totals.per100.fat} У {totals.per100.carbs} Кл {totals.per100.fiber}
             <span className="text-ink-500"> · всего {totals.kcal} ккал на {totals.grams} г</span>
           </div>
         ) : null}
@@ -220,11 +224,12 @@ export function DishForm({ initial, submitLabel, onSubmit }: Props) {
       {/* manual macros only when not composed */}
       {!composed ? (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
             <Field label="Ккал/100г" name="kcal" inputMode="decimal" value={f.kcal} onChange={set("kcal")} error={fields.kcalPer100} />
             <Field label="Белки/100г" name="protein" inputMode="decimal" value={f.protein} onChange={set("protein")} />
             <Field label="Жиры/100г" name="fat" inputMode="decimal" value={f.fat} onChange={set("fat")} />
             <Field label="Углев./100г" name="carbs" inputMode="decimal" value={f.carbs} onChange={set("carbs")} />
+            <Field label="Клетч./100г" name="fiber" inputMode="decimal" value={f.fiber} onChange={set("fiber")} />
           </div>
           <Field label="Размер порции, г (необязательно)" name="serving" inputMode="decimal" value={f.serving} onChange={set("serving")} hint="Позволит добавлять блюдо порциями" />
         </>

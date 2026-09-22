@@ -15,7 +15,7 @@ const MEALS: { value: Meal; label: string }[] = [
   { value: "snack", label: "Перекус" },
 ];
 
-type Added = { name: string; kcal: number; protein: number; fat: number; carbs: number; meal?: Meal };
+type Added = { name: string; kcal: number; protein: number; fat: number; carbs: number; fiber: number; meal?: Meal };
 
 // BarcodeAddFood drives the whole scan→lookup→confirm→log flow. On confirm it
 // hands an absolute-macro entry to onAdd (same shape the manual form uses).
@@ -43,6 +43,7 @@ export function BarcodeAddFood({ onAdd, onClose }: { onAdd: (v: Added) => void; 
         proteinPer100: product.per100g.protein,
         fatPer100: product.per100g.fat,
         carbsPer100: product.per100g.carbs,
+        fiberPer100: product.per100g.fiber,
         servingGrams: product.servingGrams ?? null,
       });
       router.push(`/dishes/${dish.id}`);
@@ -74,12 +75,13 @@ export function BarcodeAddFood({ onAdd, onClose }: { onAdd: (v: Added) => void; 
         protein: +(product.per100g.protein * factor).toFixed(1),
         fat: +(product.per100g.fat * factor).toFixed(1),
         carbs: +(product.per100g.carbs * factor).toFixed(1),
+        fiber: +(product.per100g.fiber * factor).toFixed(1),
       }
     : null;
 
   function confirm() {
     if (!product || !preview || g <= 0) return;
-    onAdd({ name: dishName(product), kcal: preview.kcal, protein: preview.protein, fat: preview.fat, carbs: preview.carbs, meal: meal || undefined });
+    onAdd({ name: dishName(product), kcal: preview.kcal, protein: preview.protein, fat: preview.fat, carbs: preview.carbs, fiber: preview.fiber, meal: meal || undefined });
     onClose();
   }
 
@@ -113,7 +115,7 @@ export function BarcodeAddFood({ onAdd, onClose }: { onAdd: (v: Added) => void; 
               <div className="truncate font-medium">{product.name}</div>
               <div className="text-xs text-ink-500">
                 {product.brand ? product.brand + " · " : ""}
-                {product.per100g.kcal} ккал/100г · Б{product.per100g.protein} Ж{product.per100g.fat} У{product.per100g.carbs}
+                {product.per100g.kcal} ккал/100г · Б{product.per100g.protein} Ж{product.per100g.fat} У{product.per100g.carbs} Кл{product.per100g.fiber}
               </div>
             </div>
           </div>
@@ -138,7 +140,7 @@ export function BarcodeAddFood({ onAdd, onClose }: { onAdd: (v: Added) => void; 
 
           {preview ? (
             <div className="rounded-xl bg-ink-800/50 px-3 py-2 text-sm text-ink-300">
-              ≈ <span className="font-semibold text-ink-100">{preview.kcal} ккал</span> · Б {preview.protein} · Ж {preview.fat} · У {preview.carbs}
+              ≈ <span className="font-semibold text-ink-100">{preview.kcal} ккал</span> · Б {preview.protein} · Ж {preview.fat} · У {preview.carbs} · Кл {preview.fiber}
             </div>
           ) : null}
 

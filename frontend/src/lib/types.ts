@@ -123,6 +123,7 @@ export interface Macros {
   protein: number;
   fat: number;
   carbs: number;
+  fiber: number;
 }
 
 export interface NutritionGoal {
@@ -130,6 +131,7 @@ export interface NutritionGoal {
   protein: number;
   fat: number;
   carbs: number;
+  fiber: number;
 }
 
 export interface DietEntry {
@@ -170,6 +172,7 @@ export interface DayTotals {
   protein: number;
   fat: number;
   carbs: number;
+  fiber: number;
   burnedKcal: number;
 }
 
