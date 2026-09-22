@@ -42,13 +42,17 @@ func (s *Service) State(ctx context.Context, userID uuid.UUID, now time.Time) (*
 	case errors.Is(err, postgres.ErrNotFound):
 		last, lerr := s.repo.GetLast(ctx, userID)
 		if lerr == nil && last.EndedAt != nil {
-			st.Phase = "eating"
-			st.GoalHours = set.EatingHours
 			start := *last.EndedAt
 			end := last.EndedAt.Add(hoursToDur(set.EatingHours))
-			st.PhaseStartAt = &start
-			st.PhaseEndAt = &end
-			st.Overrun = now.After(end)
+			// Only surface the eating window while we're actually inside it; once
+			// it has passed, stay idle so the daily schedule (below) takes over
+			// instead of showing a stale "eating overrun".
+			if now.Before(end) {
+				st.Phase = "eating"
+				st.GoalHours = set.EatingHours
+				st.PhaseStartAt = &start
+				st.PhaseEndAt = &end
+			}
 		} else if lerr != nil && !errors.Is(lerr, postgres.ErrNotFound) {
 			return nil, lerr
 		}

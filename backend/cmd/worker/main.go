@@ -218,6 +218,29 @@ func processFastingSchedules(ctx context.Context, repo *fasting.Repo, pushSvc *p
 			continue
 		}
 
+		// 0) Auto-complete a fast that reached its goal so the user flows into the
+		// eating window (and the next day can auto-start). Only for auto-managed
+		// schedules; a manual faster keeps control.
+		if hasActive && row.Schedule.AutoStart {
+			goalHours := active.GoalHours
+			goalEnd := active.StartedAt.Add(time.Duration(goalHours * float64(time.Hour)))
+			if !now.Before(goalEnd) {
+				if _, eerr := repo.End(ctx, active.ID, row.UserID, goalEnd); eerr == nil {
+					if row.Schedule.NotifyStart {
+						eatEnd := goalEnd.Add(time.Duration(row.EatingHours * float64(time.Hour)))
+						sendFastingPush(ctx, pushSvc, logger, row.UserID, push.Notification{
+							Title: "Голодание завершено 🎉",
+							Body:  fmt.Sprintf("Цель %s достигнута. Окно еды до %s.", fmtHours(goalHours), eatEnd.In(loc).Format("15:04")),
+							URL:   "/fasting",
+						})
+					}
+					active, hasActive = nil, false
+				} else if !errors.Is(eerr, postgres.ErrNotFound) {
+					logger.Error("fasting auto-complete", slog.String("error", eerr.Error()))
+				}
+			}
+		}
+
 		// 1) Auto-start the fast at the scheduled local time (once per day). The
 		// fast begins when the eating window closes: eat start + eating hours.
 		if !hasActive && row.Schedule.AutoStart {
